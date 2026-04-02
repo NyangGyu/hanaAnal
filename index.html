@@ -7,12 +7,14 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    
     <style>
         body { background-color: #f4f6f9; font-family: 'Malgun Gothic', sans-serif; }
         .card-header { font-weight: bold; background-color: #e9ecef; }
         
-        /* Drag & Drop Zone Styles */
         .dropzone {
             border: 3px dashed #0d6efd; border-radius: 10px; background-color: #f8f9fa;
             padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.3s ease;
@@ -21,37 +23,39 @@
         .dropzone.dragover { background-color: #e2eefd; border-color: #0a58ca; transform: scale(1.02); }
         .dropzone-icon { font-size: 3rem; color: #0d6efd; margin-bottom: 15px; }
         
-        /* Spinner Overlay */
         .spinner-overlay { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); 
             display: none; z-index: 9999; justify-content: center; align-items: center; color: white; flex-direction: column; 
         }
         .chart-container { position: relative; height: 320px; width: 100%; }
         
-        /* Nav Pills for Demographics & Agents (v0.4.0 다중 선택용 스타일) */
         .nav-pills .nav-link { border-radius: 50px; margin-right: 5px; font-weight: 600; color: #495057; background-color: #e9ecef; transition: all 0.2s ease; cursor: pointer; border: 2px solid transparent; }
         .nav-pills .nav-link:hover { border-color: #198754; }
         .nav-pills .nav-link.active { background-color: #198754; color: white; border-color: #198754; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         
-        /* Date Filter Bar */
         .date-filter-bar { background-color: #ffffff; border-radius: 10px; padding: 15px 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #0d6efd; }
     </style>
 </head>
 <body>
 
 <div class="spinner-overlay" id="loadingSpinner">
-    <div class="spinner-border text-light mb-3" role="status" style="width: 4rem; height: 4rem;"></div>
+    <div class="spinner-border text-primary mb-3" role="status" style="width: 4rem; height: 4rem;"></div>
     <h3 id="loadingText" class="fw-bold">데이터를 분석 중입니다...</h3>
-    <p class="text-warning mt-2">※ 데이터 양에 따라 수 초가 소요될 수 있습니다.</p>
+    <p class="text-warning mt-2">※ 화면 캡처 및 PDF 생성 시 잠시 화면이 깜빡일 수 있습니다.</p>
 </div>
 
 <div class="container mt-4 mb-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.4.0</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.5.0</span>
         </h2>
-        <button class="btn btn-dark fw-bold shadow-sm" style="display:none;" id="btnExportTop" onclick="downloadResultExcel()">📥 분석결과 엑셀 다운로드</button>
+        
+        <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
+            <button class="btn btn-outline-dark fw-bold" onclick="exportCurrentView()"><i class="bi bi-camera"></i> 화면 캡처</button>
+            <button class="btn btn-danger fw-bold" onclick="exportAggregatedPDF()"><i class="bi bi-file-pdf"></i> 종합 리포트 PDF</button>
+            <button class="btn btn-success fw-bold" onclick="downloadResultExcel()"><i class="bi bi-file-excel"></i> 데이터 엑셀</button>
+        </div>
     </div>
 
     <div class="collapse show" id="controlPanel">
@@ -69,7 +73,6 @@
                             <span class="ms-1">기준 데이터(GRM_Data) 자동 로드</span>
                         </div>
                     </div>
-                    
                     <div class="col-md-8">
                         <label class="form-label fw-bold text-secondary">타겟 데이터 (건별계약조회 엑셀 파일)</label>
                         <div id="dropZone" class="dropzone" onclick="document.getElementById('targetFile').click()">
@@ -110,7 +113,6 @@
         </ul>
 
         <div class="tab-content" id="myTabContent">
-            
             <div class="tab-pane fade show active" id="summary" role="tabpanel">
                 <div class="row mb-4 g-4">
                     <div class="col-md-6">
@@ -137,13 +139,7 @@
                     <div class="card-body p-0">
                         <table class="table table-hover table-striped mb-0 text-center align-middle fs-5">
                             <thead class="table-dark">
-                                <tr>
-                                    <th>상품군</th>
-                                    <th class="text-warning">조회기간 실적 (MCP)</th>
-                                    <th class="text-warning">조회기간 건수</th>
-                                    <th>누적 실적 (MCP)</th>
-                                    <th>누적 건수</th>
-                                </tr>
+                                <tr><th>상품군</th><th class="text-warning">조회기간 실적 (MCP)</th><th class="text-warning">조회기간 건수</th><th>누적 실적 (MCP)</th><th>누적 건수</th></tr>
                             </thead>
                             <tbody id="productTableBody"></tbody>
                         </table>
@@ -154,7 +150,7 @@
             <div class="tab-pane fade" id="agents" role="tabpanel">
                 <div class="card shadow border-0 mb-4">
                     <div class="card-body text-center bg-light rounded">
-                        <div class="text-muted mb-2 fw-bold" style="font-size: 0.9rem;"><i class="bi bi-info-circle"></i> 조회할 상품군을 클릭하세요. 다중 선택하여 합산된 실적을 확인할 수 있습니다.</div>
+                        <div class="text-muted mb-2 fw-bold" style="font-size: 0.9rem;"><i class="bi bi-info-circle"></i> 다중 선택하여 합산된 실적을 확인할 수 있습니다.</div>
                         <ul class="nav nav-pills justify-content-center" id="agentPills">
                             <li class="nav-item"><a class="nav-link active px-4" data-group="종합" onclick="toggleAgentGroup('종합')">전체 종합</a></li>
                             <li class="nav-item"><a class="nav-link px-4" data-group="종신" onclick="toggleAgentGroup('종신')">종신</a></li>
@@ -184,16 +180,11 @@
                     <div class="col-12">
                         <div class="card shadow border-0 h-100">
                             <div class="card-header bg-white fw-bold text-primary fs-5"><i class="bi bi-trophy-fill"></i> 모집인 퍼포먼스 순위 (전체)</div>
-                            <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
+                            <div class="card-body p-0 table-scroll-area" style="max-height: 500px; overflow-y: auto;">
                                 <table class="table table-hover mb-0 text-center align-middle">
                                     <thead class="table-light sticky-top shadow-sm">
                                         <tr>
-                                            <th>순위</th>
-                                            <th>소속 및 모집인명</th>
-                                            <th class="text-success">조회기간 실적(MCP)</th>
-                                            <th class="text-success">조회기간 건수</th>
-                                            <th>누적 실적(MCP)</th>
-                                            <th>누적 건수</th>
+                                            <th>순위</th><th>소속 및 모집인명</th><th class="text-success">조회기간 실적(MCP)</th><th class="text-success">조회기간 건수</th><th>누적 실적(MCP)</th><th>누적 건수</th>
                                         </tr>
                                     </thead>
                                     <tbody id="agentTableBody"></tbody>
@@ -207,7 +198,7 @@
             <div class="tab-pane fade" id="demo" role="tabpanel">
                 <div class="card shadow border-0 mb-4">
                     <div class="card-body text-center bg-light rounded">
-                        <div class="text-muted mb-2 fw-bold" style="font-size: 0.9rem;"><i class="bi bi-info-circle"></i> 다중 선택으로 조합된 상품군의 타겟 고객층을 교차 분석합니다.</div>
+                        <div class="text-muted mb-2 fw-bold" style="font-size: 0.9rem;"><i class="bi bi-info-circle"></i> 다중 선택으로 조합된 상품군의 고객층을 교차 분석합니다.</div>
                         <ul class="nav nav-pills justify-content-center" id="demoPills">
                             <li class="nav-item"><a class="nav-link active px-4" data-group="종합" onclick="toggleDemoGroup('종합')">전체 종합</a></li>
                             <li class="nav-item"><a class="nav-link px-4" data-group="종신" onclick="toggleDemoGroup('종신')">종신</a></li>
@@ -237,7 +228,7 @@
                 <div class="row g-4">
                     <div class="col-md-6">
                         <div class="card shadow border-0 h-100">
-                            <div class="card-header bg-white fw-bold fs-5 text-primary">청약 방법 비율 (DX 디지털 전환율)</div>
+                            <div class="card-header bg-white fw-bold fs-5 text-primary">청약 방법 비율 (DX 전환율)</div>
                             <div class="card-body"><div class="chart-container"><canvas id="dxChart"></canvas></div></div>
                         </div>
                     </div>
@@ -259,30 +250,32 @@
 
 <script>
     // --- 1. 전역 상태 및 In-Memory 캐싱 ---
-    let globalParsedData = []; // 타겟 엑셀을 정제하여 담아둘 In-Memory DB
+    let globalParsedData = []; 
     let globalGrmId = "";
     let globalGrmMap = new Map();     
     let globalProductMap = new Map(); 
 
     const groupTypes = ['종합', '종신', '변액', '건강', '연금'];
     
-    // 집계용 변수
     let totAccMcp = 0, totAccCnt = 0, totPeriodMcp = 0, totPeriodCnt = 0;
     let groupStats = {};
     let agentMap = new Map();
     let demoStats = {}; 
     let dxMap = new Map();
     
-    // v0.4.0: 다중 선택(Multi-Select) 탭 상태 관리 Set
     let activeAgentGroups = new Set(['종합']);
     let activeDemoGroups = new Set(['종합']);
     let currentAgentSort = 'mcp';
 
     let chartInstances = {}; 
-    let globalResultData = []; // 엑셀 Export용 Raw Data 보관
+    let globalResultData = []; 
+    
+    // 차트 애니메이션 글로벌 비활성화 (캡처 시 빈 화면 방지용)
+    Chart.defaults.animation = false;
+
     const formatNum = (num) => Math.floor(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
-    // --- 2. 초기화 (Pre-load 아키텍처) ---
+    // --- 2. 초기화 ---
     window.addEventListener('DOMContentLoaded', async () => {
         const btnStart = document.getElementById('btnStart');
         const grmSelect = document.getElementById('grmIdSelect');
@@ -337,7 +330,7 @@
         }
     });
 
-    // --- 3. Drag & Drop UI 이벤트 ---
+    // --- 3. Drag & Drop UI ---
     const dropZone = document.getElementById('dropZone');
     const targetFileInput = document.getElementById('targetFile');
 
@@ -369,7 +362,7 @@
         }
     }
 
-    // --- 4. 유틸리티 함수 ---
+    // --- 4. 분석 엔진 1단계 ---
     const readExcelFile = (file) => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -399,30 +392,28 @@
         });
     }
 
-    // --- 5. 분석 엔진 1단계: 엑셀 파싱 및 In-Memory 적재 ---
     async function startAnalysis() {
         const grmId = document.getElementById('grmIdSelect').value.trim();
         const targetFile = document.getElementById('targetFile').files[0];
 
-        if(!grmId) return alert("GRM 담당자를 콤보박스에서 선택해주세요.");
-        if(!targetFile) return alert("타겟 데이터(건별계약조회) 엑셀 파일을 업로드해주세요.");
+        if(!grmId) return alert("GRM 담당자를 선택해주세요.");
+        if(!targetFile) return alert("타겟 데이터 엑셀 파일을 업로드해주세요.");
 
         globalGrmId = grmId;
         document.getElementById('loadingSpinner').style.display = 'flex';
         
         try {
-            document.getElementById('loadingText').innerText = "엑셀 데이터를 In-Memory 캐시로 파싱 중...";
+            document.getElementById('loadingText').innerText = "데이터 파싱 중...";
             
             let branchSet = globalGrmMap.get(grmId);
-            if(!branchSet) throw new Error("선택하신 사번의 지점코드 매핑 데이터를 찾을 수 없습니다.");
+            if(!branchSet) throw new Error("지점코드 매핑 데이터가 없습니다.");
 
             const targetWb = await readExcelFile(targetFile);
             const targetData = XLSX.utils.sheet_to_json(targetWb.Sheets[targetWb.SheetNames[0]], {header: 1});
 
             globalParsedData = [];
-            globalResultData = [targetData[0]]; // 헤더 보관
+            globalResultData = [targetData[0]]; 
 
-            // 1-Pass 추출: 순수 필요 데이터만 JSON 오브젝트로 경량화하여 캐싱
             for(let r = 1; r < targetData.length; r++) {
                 const row = targetData[r];
                 if(!row || !row[3]) continue;
@@ -430,7 +421,6 @@
                 
                 if(branchSet.has(branchCode)) {
                     globalResultData.push(row);
-                    
                     let prodName = String(row[21] || "").trim();
                     globalParsedData.push({
                         rawDate: String(row[0] || "").replace(/[^\d]/g, ""), 
@@ -445,56 +435,47 @@
                 }
             }
 
-            // 달력 기본값을 오늘 날짜로 세팅
             let todayStr = new Date().toISOString().split('T')[0];
             document.getElementById('startDate').value = todayStr;
             document.getElementById('endDate').value = todayStr;
 
-            // UI 전환 및 최초 동적 재계산 실행
             var bsCollapse = new bootstrap.Collapse(document.getElementById('controlPanel'), { toggle: false });
             bsCollapse.hide();
             
             document.getElementById('loadingSpinner').style.display = 'none';
             document.getElementById('dashboardArea').style.display = 'block';
-            document.getElementById('btnExportTop').style.display = 'inline-block';
+            document.getElementById('exportBtnGroup').style.display = 'inline-flex'; // v0.5.0 Export 버튼들 표시
 
-            runAggregation(); // 엔진 가동
+            runAggregation();
 
         } catch (error) {
             document.getElementById('loadingSpinner').style.display = 'none';
             alert("시스템 오류: " + error.message);
-            console.error(error);
         }
     }
 
-    // --- 6. 분석 엔진 2단계: 기간 및 다중상품 기반 동적 재계산 (Core) ---
+    // --- 5. 분석 엔진 2단계 ---
     function runAggregation() {
         let startVal = document.getElementById('startDate').value.replace(/-/g, '');
         let endVal = document.getElementById('endDate').value.replace(/-/g, '');
-        if(!startVal || !endVal) { startVal = '00000000'; endVal = '99999999'; } // 날짜 미지정시 전체
+        if(!startVal || !endVal) { startVal = '00000000'; endVal = '99999999'; } 
 
-        // 변수 초기화
         totAccMcp = 0; totAccCnt = 0; totPeriodMcp = 0; totPeriodCnt = 0;
         groupTypes.forEach(g => groupStats[g] = { aM:0, aC:0, pM:0, pC:0 });
-        agentMap.clear();
-        dxMap.clear();
+        agentMap.clear(); dxMap.clear();
         groupTypes.forEach(g => demoStats[g] = { age: {}, gen: {} });
 
-        // In-Memory 고속 순회 (0.01초 소요)
         for(let item of globalParsedData) {
             let isPeriod = (item.rawDate >= startVal && item.rawDate <= endVal);
 
-            // [종합 실적]
             totAccMcp += item.mcp; totAccCnt++;
             if(isPeriod) { totPeriodMcp += item.mcp; totPeriodCnt++; }
 
-            // [상품군별 실적]
             if(groupStats[item.gName]) {
                 groupStats[item.gName].aM += item.mcp; groupStats[item.gName].aC++;
                 if(isPeriod) { groupStats[item.gName].pM += item.mcp; groupStats[item.gName].pC++; }
             }
 
-            // [모집인 실적 3D 캐싱]
             if(item.agtId) {
                 if(!agentMap.has(item.agtId)) {
                     let initStats = {};
@@ -512,7 +493,6 @@
                 }
             }
 
-            // [데모그래픽]
             let ageGroup = getAgeGroup(item.yy);
             if(item.gen) {
                 demoStats['종합'].age[ageGroup] = (demoStats['종합'].age[ageGroup]||0)+1;
@@ -522,19 +502,13 @@
                     demoStats[item.gName].gen[item.gen] = (demoStats[item.gName].gen[item.gen]||0)+1;
                 }
             }
-
-            // [DX 전환율]
             if(item.dxType) dxMap.set(item.dxType, (dxMap.get(item.dxType)||0)+1);
         }
 
-        // 렌더링 파이프라인 가동
-        renderSummary();
-        renderAgentUI();
-        renderDemoUI();
-        renderEfficiency();
+        renderSummary(); renderAgentUI(); renderDemoUI(); renderEfficiency();
     }
 
-    // --- 7. UI 렌더링 서브 모듈 ---
+    // --- 6. UI 렌더링 서브 모듈 ---
     function renderSummary() {
         document.getElementById('ui_tot_acc_mcp').innerText = formatNum(totAccMcp);
         document.getElementById('ui_tot_acc_cnt').innerText = `총 ${formatNum(totAccCnt)}건`;
@@ -542,43 +516,31 @@
         document.getElementById('ui_tot_period_cnt').innerText = `기간 내 ${formatNum(totPeriodCnt)}건`;
 
         let tbody = document.getElementById('productTableBody'); tbody.innerHTML = "";
-        // v0.4.0 순서: 상품군 | 기간(당일) 실적 | 기간 건수 | 누적 실적 | 누적 건수
         groupTypes.filter(g => g !== '종합').forEach(key => {
             let st = groupStats[key];
             tbody.innerHTML += `<tr><td class="fw-bold">${key}</td><td class="text-danger fw-bold">${formatNum(st.pM)}</td><td class="text-danger">${formatNum(st.pC)}</td><td class="fw-bold">${formatNum(st.aM)}</td><td>${formatNum(st.aC)}</td></tr>`;
         });
     }
 
-    // v0.4.0 다중 선택(Toggle) 로직 구현
     function toggleAgentGroup(grp) {
-        if(grp === '종합') {
-            activeAgentGroups.clear();
-            activeAgentGroups.add('종합');
-        } else {
+        if(grp === '종합') { activeAgentGroups.clear(); activeAgentGroups.add('종합'); } 
+        else {
             activeAgentGroups.delete('종합');
-            if(activeAgentGroups.has(grp)) activeAgentGroups.delete(grp);
-            else activeAgentGroups.add(grp);
-            
+            if(activeAgentGroups.has(grp)) activeAgentGroups.delete(grp); else activeAgentGroups.add(grp);
             if(activeAgentGroups.size === 0) activeAgentGroups.add('종합');
         }
-        
         document.querySelectorAll('#agentPills .nav-link').forEach(btn => {
-            if(activeAgentGroups.has(btn.dataset.group)) btn.classList.add('active');
-            else btn.classList.remove('active');
+            if(activeAgentGroups.has(btn.dataset.group)) btn.classList.add('active'); else btn.classList.remove('active');
         });
         renderAgentUI();
     }
 
-    function changeAgentSort(sortType) {
-        currentAgentSort = sortType;
-        renderAgentUI();
-    }
+    function changeAgentSort(sortType) { currentAgentSort = sortType; renderAgentUI(); }
 
     function renderAgentUI() {
         let isMcp = currentAgentSort === 'mcp';
         let validAgents = [];
 
-        // 다중 선택된 상품군의 실적을 동적으로 합산(Reduce)
         for(let a of agentMap.values()) {
             let agg = { aM:0, aC:0, pM:0, pC:0 };
             for(let grp of activeAgentGroups) {
@@ -596,9 +558,8 @@
         
         let aTbody = document.getElementById('agentTableBody'); aTbody.innerHTML = "";
         if(sorted.length === 0) {
-            aTbody.innerHTML = `<tr><td colspan="6" class="text-muted py-4">해당 상품군의 실적이 존재하지 않습니다.</td></tr>`;
+            aTbody.innerHTML = `<tr><td colspan="6" class="text-muted py-4">실적이 존재하지 않습니다.</td></tr>`;
         } else {
-            // v0.4.0 순서: 순위 | 이름 | 기간 실적 | 기간 건수 | 누적 실적 | 누적 건수
             sorted.forEach((a, idx) => {
                 aTbody.innerHTML += `
                     <tr>
@@ -617,28 +578,21 @@
         renderChart('agentChart', 'bar', chartLabels, chartData, '#0d6efd', isMcp ? '누적 실적(MCP)' : '누적 건수');
     }
 
-    // 데모그래픽 다중 선택
     function toggleDemoGroup(grp) {
-        if(grp === '종합') {
-            activeDemoGroups.clear(); activeDemoGroups.add('종합');
-        } else {
+        if(grp === '종합') { activeDemoGroups.clear(); activeDemoGroups.add('종합'); } 
+        else {
             activeDemoGroups.delete('종합');
-            if(activeDemoGroups.has(grp)) activeDemoGroups.delete(grp);
-            else activeDemoGroups.add(grp);
+            if(activeDemoGroups.has(grp)) activeDemoGroups.delete(grp); else activeDemoGroups.add(grp);
             if(activeDemoGroups.size === 0) activeDemoGroups.add('종합');
         }
-        
         document.querySelectorAll('#demoPills .nav-link').forEach(btn => {
-            if(activeDemoGroups.has(btn.dataset.group)) btn.classList.add('active');
-            else btn.classList.remove('active');
+            if(activeDemoGroups.has(btn.dataset.group)) btn.classList.add('active'); else btn.classList.remove('active');
         });
         renderDemoUI();
     }
 
     function renderDemoUI() {
         let aggDemo = { age: {}, gen: {} };
-        
-        // 다중 탭 선택 시 데이터 병합
         for(let grp of activeDemoGroups) {
             let dData = demoStats[grp];
             for(let k in dData.age) aggDemo.age[k] = (aggDemo.age[k]||0) + dData.age[k];
@@ -662,7 +616,130 @@
         renderChart('dxChart', 'doughnut', dxKeys, dxKeys.map(k=>dxMap.get(k)), ['#198754','#ffc107','#6c757d','#0dcaf0'], '청약 방법 비중');
     }
 
-    // --- 8. 분석결과 엑셀 다운로드 (v0.4.0 컬럼 순서 맞춤) ---
+    // --- 7. (v0.5.0) 시각화 캡처 및 PDF 리포트 추출 함수 모음 ---
+    
+    // 강제 스크롤 해제 헬퍼 함수
+    function removeScrollLimits() {
+        const scrollAreas = document.querySelectorAll('.table-scroll-area');
+        const originalStyles = [];
+        scrollAreas.forEach(area => {
+            originalStyles.push(area.getAttribute('style'));
+            area.style.maxHeight = 'none';
+            area.style.overflowY = 'visible';
+        });
+        return originalStyles;
+    }
+    
+    // 강제 스크롤 복구 헬퍼 함수
+    function restoreScrollLimits(originalStyles) {
+        const scrollAreas = document.querySelectorAll('.table-scroll-area');
+        scrollAreas.forEach((area, idx) => {
+            area.setAttribute('style', originalStyles[idx] || 'max-height: 500px; overflow-y: auto;');
+        });
+    }
+
+    // 7-1. 현재 화면 캡처(단일 페이지 Export)
+    async function exportCurrentView() {
+        document.getElementById('loadingText').innerText = "현재 화면을 캡처하고 있습니다...";
+        document.getElementById('loadingSpinner').style.display = 'flex';
+        
+        const originalStyles = removeScrollLimits();
+        await new Promise(r => setTimeout(r, 100)); // 렌더링 리플로우 대기
+
+        try {
+            // 현재 활성화된 탭의 본문 영역만 캡처
+            const activeTabPane = document.querySelector('.tab-pane.active');
+            const canvas = await html2canvas(activeTabPane, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
+            
+            const link = document.createElement('a');
+            link.download = `${globalGrmId}_화면캡처_${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } catch (e) {
+            alert('캡처 중 오류가 발생했습니다.');
+            console.error(e);
+        } finally {
+            restoreScrollLimits(originalStyles);
+            document.getElementById('loadingSpinner').style.display = 'none';
+        }
+    }
+
+    // 7-2. 모든 탭 자동 순회 PDF 생성 (Aggregated PDF Export)
+    async function exportAggregatedPDF() {
+        document.getElementById('loadingText').innerText = "모든 탭을 순회하며 종합 PDF 보고서를 생성 중입니다...";
+        document.getElementById('loadingSpinner').style.display = 'flex';
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const margin = 10;
+            const renderWidth = pdfWidth - (margin * 2);
+
+            const tabIds = ['summary', 'agents', 'demo', 'efficiency'];
+            const tabButtons = [
+                'button[data-bs-target="#summary"]', 
+                'button[data-bs-target="#agents"]', 
+                'button[data-bs-target="#demo"]', 
+                'button[data-bs-target="#efficiency"]'
+            ];
+            
+            // 현재 사용자가 보던 탭 백업
+            const activeTabBtn = document.querySelector('#myTab .nav-link.active');
+            const originalStyles = removeScrollLimits();
+
+            for (let i = 0; i < tabIds.length; i++) {
+                // 1. 탭 강제 전환
+                const tabEl = document.querySelector(tabButtons[i]);
+                const tabIns = new bootstrap.Tab(tabEl);
+                tabIns.show();
+
+                // 2. 렌더링을 위한 안전 대기시간 부여 (표 늘어남 및 차트 대기)
+                await new Promise(r => setTimeout(r, 200));
+
+                // 3. 해당 탭의 DOM 영역 캡처
+                const targetDom = document.getElementById(tabIds[i]);
+                const canvas = await html2canvas(targetDom, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
+                const imgData = canvas.toDataURL('image/png');
+
+                // 4. 이미지 비율 계산
+                const imgProps = pdf.getImageProperties(imgData);
+                const renderHeight = (imgProps.height * renderWidth) / imgProps.width;
+
+                if (i > 0) pdf.addPage();
+                
+                // 5. 긴 테이블 캡처본(A4 높이 초과)에 대한 멀티 페이지 분할 로직(Hack)
+                let heightLeft = renderHeight;
+                let position = margin;
+
+                pdf.addImage(imgData, 'PNG', margin, position, renderWidth, renderHeight);
+                heightLeft -= (pdfHeight - margin * 2);
+
+                while (heightLeft >= 0) {
+                    position = position - pdfHeight; // 이미지를 위로 끌어올림
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', margin, position, renderWidth, renderHeight);
+                    heightLeft -= pdfHeight;
+                }
+            }
+
+            // 모든 촬영 종료, 복구 작업
+            restoreScrollLimits(originalStyles);
+            const origTab = new bootstrap.Tab(activeTabBtn);
+            origTab.show();
+
+            pdf.save(`${globalGrmId}_종합분석_리포트_${Date.now()}.pdf`);
+
+        } catch (e) {
+            alert('PDF 생성 중 오류가 발생했습니다.');
+            console.error(e);
+        } finally {
+            document.getElementById('loadingSpinner').style.display = 'none';
+        }
+    }
+
+    // --- 8. 기존 데이터 엑셀 다운로드 ---
     function downloadResultExcel() {
         if(globalResultData.length <= 1) return alert("다운로드할 데이터가 없습니다.");
         const wb = XLSX.utils.book_new();
