@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GA 업적 분석 대시보드 - Enterprise Edition</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Malgun Gothic', sans-serif; }
+        .card-header { font-weight: bold; background-color: #e9ecef; }
+        
+        /* Drag & Drop Zone Styles */
+        .dropzone {
+            border: 3px dashed #0d6efd; border-radius: 10px; background-color: #f8f9fa;
+            padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.3s ease;
+        }
+        .dropzone.dragover { background-color: #e2eefd; border-color: #0a58ca; transform: scale(1.02); }
+        .dropzone-icon { font-size: 3rem; color: #0d6efd; margin-bottom: 15px; }
+        
+        /* Spinner Overlay */
+        .spinner-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); 
+            display: none; z-index: 9999; justify-content: center; align-items: center; color: white; flex-direction: column; 
+        }
+        .chart-container { position: relative; height: 320px; width: 100%; }
+        
+        /* Nav Pills for Demographics */
+        .nav-pills .nav-link { border-radius: 50px; margin-right: 5px; font-weight: 600; color: #495057; background-color: #e9ecef; }
+        .nav-pills .nav-link.active { background-color: #198754; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="spinner-overlay" id="loadingSpinner">
+    <div class="spinner-border text-light mb-3" role="status" style="width: 4rem; height: 4rem;"></div>
+    <h3 id="loadingText" class="fw-bold">데이터를 분석 중입니다...</h3>
+    <p class="text-warning mt-2">※ 데이터 양에 따라 수 초가 소요될 수 있습니다.</p>
+</div>
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>📊 GA 업적 분석 시스템 <span class="badge bg-primary fs-6 align-middle">Enterprise</span></h2>
+        <button class="btn btn-dark fw-bold shadow-sm" style="display:none;" id="btnExportTop" onclick="downloadResultExcel()">📥 경영진 보고용 엑셀 다운로드</button>
+    </div>
+
+    <div class="collapse show" id="controlPanel">
+        <div class="card shadow-sm mb-4 border-primary">
+            <div class="card-header text-primary bg-white fs-5"><i class="bi bi-gear-fill"></i> 1. 데이터 업로드 및 설정</div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold text-secondary">GRM 사번 입력</label>
+                        <input type="text" id="grmId" class="form-control form-control-lg border-primary" placeholder="예: G7186099">
+                        <div class="form-text mt-2">
+                            <span class="badge bg-secondary">Notice</span> 기준 데이터(GRM_Data)는 서버에서 최신 버전으로 자동 로드됩니다.
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <label class="form-label fw-bold text-secondary">타겟 데이터 (건별계약조회 엑셀 파일)</label>
+                        <div id="dropZone" class="dropzone" onclick="document.getElementById('targetFile').click()">
+                            <div class="dropzone-icon">📄</div>
+                            <h5 class="fw-bold text-primary">여기로 엑셀 파일을 드래그 앤 드롭 하세요</h5>
+                            <p class="text-muted mb-0">또는 클릭하여 파일 선택 (CSV, XLSX, XLS)</p>
+                            <input type="file" id="targetFile" class="d-none" accept=".xlsx, .xls, .csv" onchange="handleFileSelect(event)">
+                        </div>
+                        <div id="fileStatus" class="mt-2 text-success fw-bold text-center" style="display: none;"></div>
+                    </div>
+                </div>
+                <div class="text-center mt-4 pt-3 border-top">
+                    <button class="btn btn-primary btn-lg px-5 fw-bold fs-5 shadow" onclick="startAnalysis()">🚀 심층 BI 분석 시작</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboardArea" style="display: none;">
+        <ul class="nav nav-tabs mb-4 fs-5" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation"><button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#summary" type="button">종합 요약</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#agents" type="button">우수 모집인 분석</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#demo" type="button">고객 데모그래픽</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#efficiency" type="button">영업 효율 및 객단가</button></li>
+        </ul>
+
+        <div class="tab-content" id="myTabContent">
+            
+            <div class="tab-pane fade show active" id="summary" role="tabpanel">
+                <div class="row mb-4 g-4">
+                    <div class="col-md-6">
+                        <div class="card text-white bg-primary shadow h-100 border-0">
+                            <div class="card-body text-center p-4">
+                                <h5 class="card-title text-light mb-3">누적 총 실적</h5>
+                                <h1 id="ui_tot_acc_mcp" class="display-4 fw-bold mb-2">0</h1>
+                                <p class="card-text fs-4" id="ui_tot_acc_cnt">총 0건</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card text-white bg-success shadow h-100 border-0">
+                            <div class="card-body text-center p-4">
+                                <h5 class="card-title text-light mb-3">당일 총 실적</h5>
+                                <h1 id="ui_tot_today_mcp" class="display-4 fw-bold mb-2">0</h1>
+                                <p class="card-text fs-4" id="ui_tot_today_cnt">당일 0건</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card shadow border-0">
+                    <div class="card-header bg-white fs-5 fw-bold py-3">상품군별 상세 통계</div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover table-striped mb-0 text-center align-middle fs-5">
+                            <thead class="table-dark">
+                                <tr><th>상품군</th><th>누적 실적 (MCP)</th><th>누적 건수</th><th class="text-warning">당일 실적 (MCP)</th><th class="text-warning">당일 건수</th></tr>
+                            </thead>
+                            <tbody id="productTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="agents" role="tabpanel">
+                <div class="d-flex justify-content-end mb-3">
+                    <div class="btn-group shadow-sm" role="group">
+                        <input type="radio" class="btn-check" name="agentSort" id="sortMcp" autocomplete="off" checked onchange="renderAgentUI('mcp')">
+                        <label class="btn btn-outline-primary fw-bold px-4" for="sortMcp">💰 MCP 기준 정렬</label>
+                        <input type="radio" class="btn-check" name="agentSort" id="sortCnt" autocomplete="off" onchange="renderAgentUI('cnt')">
+                        <label class="btn btn-outline-primary fw-bold px-4" for="sortCnt">📄 건수 기준 정렬</label>
+                    </div>
+                </div>
+                <div class="row g-4">
+                    <div class="col-md-7">
+                        <div class="card shadow border-0 h-100">
+                            <div class="card-header bg-white fw-bold">Top 10 모집인 퍼포먼스</div>
+                            <div class="card-body"><div class="chart-container"><canvas id="agentChart"></canvas></div></div>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="card shadow border-0 h-100">
+                            <div class="card-header bg-white fw-bold">파레토 법칙 (상위 퍼포머 명단)</div>
+                            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                                <table class="table table-hover mb-0 text-center align-middle">
+                                    <thead class="table-light sticky-top"><tr><th>순위</th><th>소속 및 모집인명</th><th id="thTarget">실적/건수</th></tr></thead>
+                                    <tbody id="agentTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="demo" role="tabpanel">
+                <div class="card shadow border-0 mb-4">
+                    <div class="card-body text-center bg-light rounded">
+                        <ul class="nav nav-pills justify-content-center" id="demoPills">
+                            <li class="nav-item"><button class="nav-link active px-4" onclick="switchDemoGroup('종합')">전체 종합</button></li>
+                            <li class="nav-item"><button class="nav-link px-4" onclick="switchDemoGroup('종신')">종신</button></li>
+                            <li class="nav-item"><button class="nav-link px-4" onclick="switchDemoGroup('변액')">변액</button></li>
+                            <li class="nav-item"><button class="nav-link px-4" onclick="switchDemoGroup('건강')">건강</button></li>
+                            <li class="nav-item"><button class="nav-link px-4" onclick="switchDemoGroup('연금')">연금</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card shadow border-0 h-100">
+                            <div class="card-header bg-white fw-bold" id="titleAgeChart">연령대별 가입 비중</div>
+                            <div class="card-body"><div class="chart-container"><canvas id="ageChart"></canvas></div></div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card shadow border-0 h-100">
+                            <div class="card-header bg-white fw-bold" id="titleGenderChart">성별 가입 비중</div>
+                            <div class="card-body"><div class="chart-container"><canvas id="genderChart"></canvas></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="efficiency" role="tabpanel">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card shadow border-0 h-100">
+                            <div class="card-header bg-white fw-bold">청약 방법 비율 (DX 디지털 전환율)</div>
+                            <div class="card-body"><div class="chart-container"><canvas id="dxChart"></canvas></div></div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card shadow border-0 h-100 bg-light d-flex flex-column justify-content-center align-items-center text-center p-5">
+                            <h3 class="text-secondary mb-4">지점 평균 객단가 (1건당 수익성)</h3>
+                            <h1 id="ui_avg_mcp" class="display-3 fw-bold text-primary mb-3">0</h1>
+                            <p class="text-muted fs-5">객단가가 높을수록 고부가가치 상품(종신, 통합 등)의<br>영업 비중 및 질적 성장이 뛰어남을 의미합니다.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    // --- 1. 전역 상태 및 데이터 캐싱 변수 ---
+    let globalResultData = []; 
+    let globalGrmId = "";
+    let globalStats = {}; 
+    let chartInstances = {}; 
+
+    // 데모그래픽 교차분석용 3차원 데이터 컨테이너
+    const groupTypes = ['종합', '종신', '변액', '건강', '연금'];
+    let demoStats = {}; 
+    
+    // 모집인 데이터 캐싱
+    let agentArray = []; 
+
+    const formatNum = (num) => Math.floor(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+    // --- 2. Drag & Drop UI 이벤트 컨트롤 ---
+    const dropZone = document.getElementById('dropZone');
+    const targetFileInput = document.getElementById('targetFile');
+    const fileStatus = document.getElementById('fileStatus');
+
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault(); dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            targetFileInput.files = e.dataTransfer.files;
+            handleFileSelect({target: targetFileInput});
+        }
+    });
+
+    function handleFileSelect(e) {
+        if(e.target.files.length > 0) {
+            fileStatus.style.display = 'block';
+            fileStatus.innerHTML = `✔️ 파일 첨부 완료: ${e.target.files[0].name}`;
+            dropZone.style.borderColor = '#198754';
+        }
+    }
+
+    // --- 3. 핵심 유틸리티 함수 ---
+    const readExcelFile = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(XLSX.read(new Uint8Array(e.target.result), { type: 'array' }));
+            reader.onerror = (e) => reject(e);
+            reader.readAsArrayBuffer(file);
+        });
+    };
+
+    function getAgeGroup(yyyymmdd) {
+        if(!yyyymmdd || yyyymmdd.length < 6) return "미상";
+        let yy = parseInt(yyyymmdd.substring(0, 2));
+        let year = yy > 26 ? 1900 + yy : 2000 + yy; 
+        let age = 2026 - year; // 기준년도 2026
+        if(age < 20) return "10대 이하"; if(age < 30) return "20대";
+        if(age < 40) return "30대";      if(age < 50) return "40대";
+        if(age < 60) return "50대";      return "60대 이상";
+    }
+
+    function renderChart(canvasId, type, labels, data, colors, title) {
+        if(chartInstances[canvasId]) chartInstances[canvasId].destroy(); // Ghosting 방지
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        chartInstances[canvasId] = new Chart(ctx, {
+            type: type,
+            data: { labels: labels, datasets: [{ label: title, data: data, backgroundColor: colors, borderWidth: 1 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type==='bar'?'none':'right' } } }
+        });
+    }
+
+    // --- 4. 메인 분석 프로세스 (Core BI Engine) ---
+    async function startAnalysis() {
+        const grmId = document.getElementById('grmId').value.trim();
+        const targetFile = document.getElementById('targetFile').files[0];
+
+        if(!grmId) return alert("GRM 사번을 입력해주세요.");
+        if(!targetFile) return alert("타겟 데이터(건별계약조회) 엑셀 파일을 업로드해주세요.");
+
+        globalGrmId = grmId;
+        document.getElementById('loadingSpinner').style.display = 'flex';
+        
+        try {
+            // [자동화] GitHub에서 GRM_Data.xlsx Fetch (Cache Busting)
+            document.getElementById('loadingText').innerText = "서버에서 최신 기준 데이터(GRM_Data) 동기화 중...";
+            const cacheBuster = `?v=${Date.now()}`;
+            const response = await fetch('./GRM_Data.xlsx' + cacheBuster);
+            if(!response.ok) throw new Error("서버에서 GRM_Data.xlsx 파일을 찾을 수 없습니다. (경로 확인 필요)");
+            const arrayBuffer = await response.arrayBuffer();
+            const baseWb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+            
+            // 1. GRM코드 Set (해시맵) 구성
+            const grmData = XLSX.utils.sheet_to_json(baseWb.Sheets["GRM별_지점코드"], {header: 1});
+            let targetColIdx = grmData[0].findIndex(val => String(val).trim() === grmId);
+            if(targetColIdx === -1) throw new Error("입력하신 사번이 GRM별_지점코드에 존재하지 않습니다.");
+
+            let branchSet = new Set();
+            for(let r = 2; r < grmData.length; r++) {
+                if(grmData[r] && grmData[r][targetColIdx]) branchSet.add(String(grmData[r][targetColIdx]).trim());
+            }
+
+            // 2. 상품 Map 구성
+            const prodData = XLSX.utils.sheet_to_json(baseWb.Sheets["상품Data"], {header: 1});
+            let productMap = new Map();
+            for(let r = 1; r < prodData.length; r++) {
+                if(prodData[r] && prodData[r][0]) productMap.set(String(prodData[r][0]).trim(), String(prodData[r][1]).trim());
+            }
+
+            // 3. 타겟 데이터 연산 시작
+            document.getElementById('loadingText').innerText = "초고속 매칭 및 다각도 분석 엔진 가동 중...";
+            const targetWb = await readExcelFile(targetFile);
+            const targetData = XLSX.utils.sheet_to_json(targetWb.Sheets[targetWb.SheetNames[0]], {header: 1});
+
+            let sToday = new Date().getFullYear() + String(new Date().getMonth()+1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0');
+            
+            // 통계 컨테이너 초기화
+            let totAccMcp = 0, totAccCnt = 0, totTodayMcp = 0, totTodayCnt = 0;
+            let groupStats = { "변액":{aM:0,aC:0,tM:0,tC:0}, "연금":{aM:0,aC:0,tM:0,tC:0}, "종신":{aM:0,aC:0,tM:0,tC:0}, "건강":{aM:0,aC:0,tM:0,tC:0} };
+            let agentMap = new Map(); // 사번(F열) 기준 맵핑
+            let dxMap = new Map();
+
+            // 데모그래픽 구조체 초기화 (종합 + 4대 상품군)
+            groupTypes.forEach(g => demoStats[g] = { age: {}, gen: {} });
+
+            globalResultData = [targetData[0]]; // 헤더 백업
+
+            // 데이터 순회 (Row by Row)
+            for(let r = 1; r < targetData.length; r++) {
+                const row = targetData[r];
+                if(!row || !row[3]) continue;
+                const branchCode = String(row[3]).trim(); // D열
+                
+                if(branchSet.has(branchCode)) {
+                    globalResultData.push(row);
+
+                    let rawDate = String(row[0] || "").replace(/[^\d]/g, ""); // A열
+                    let agtAgency = String(row[1] || "").trim(); // B열 대리점명
+                    let agtBranch = String(row[2] || "").trim(); // C열 지점명
+                    let agtName = String(row[4] || "").trim();   // E열 이름
+                    let agtId = String(row[5] || "").trim();     // F열 모집인 사번 (Absolute Key)
+                    
+                    let mcp = Number(String(row[30] || "").replace(/[^\d\.-]/g, "")) || 0; // AE열
+                    let prodName = String(row[21] || "").trim(); // V열
+                    let yy = String(row[16] || "").replace(/[^\d]/g, ""); // Q열
+                    let gen = String(row[17] || "").trim(); // R열
+                    let dxType = String(row[34] || "").trim(); // AI열
+
+                    // (A) 종합 실적 합산
+                    totAccMcp += mcp; totAccCnt++;
+                    if(rawDate === sToday) { totTodayMcp += mcp; totTodayCnt++; }
+
+                    // (B) 상품군 판별 및 합산
+                    let gName = productMap.get(prodName) || "기타";
+                    if(groupStats[gName]) {
+                        groupStats[gName].aM += mcp; groupStats[gName].aC++;
+                        if(rawDate === sToday) { groupStats[gName].tM += mcp; groupStats[gName].tC++; }
+                    }
+
+                    // (C) 우수 모집인 파레토 합산 (동명이인 방지를 위해 사번 기준)
+                    if(agtId) {
+                        let displayStr = `[${agtAgency}] ${agtBranch} - ${agtName}`;
+                        let cur = agentMap.get(agtId) || { display: displayStr, mcp: 0, cnt: 0 };
+                        agentMap.set(agtId, { display: cur.display, mcp: cur.mcp + mcp, cnt: cur.cnt + 1 });
+                    }
+
+                    // (D) 데모그래픽 교차분석 (연령/성별)
+                    let ageGroup = getAgeGroup(yy);
+                    if(gen) {
+                        // 1. 전체(종합)에 무조건 합산
+                        demoStats['종합'].age[ageGroup] = (demoStats['종합'].age[ageGroup] || 0) + 1;
+                        demoStats['종합'].gen[gen] = (demoStats['종합'].gen[gen] || 0) + 1;
+                        
+                        // 2. 해당 상품군에만 별도 합산
+                        if(demoStats[gName]) {
+                            demoStats[gName].age[ageGroup] = (demoStats[gName].age[ageGroup] || 0) + 1;
+                            demoStats[gName].gen[gen] = (demoStats[gName].gen[gen] || 0) + 1;
+                        }
+                    }
+
+                    // (E) 영업 효율(DX)
+                    if(dxType) dxMap.set(dxType, (dxMap.get(dxType) || 0) + 1);
+                }
+            }
+
+            // --- 5. UI 바인딩 및 렌더링 ---
+            
+            // 컨트롤 패널 접기 (Bootstrap Collapse)
+            var bsCollapse = new bootstrap.Collapse(document.getElementById('controlPanel'), { toggle: false });
+            bsCollapse.hide();
+
+            // 요약 탭 렌더링
+            document.getElementById('ui_tot_acc_mcp').innerText = formatNum(totAccMcp);
+            document.getElementById('ui_tot_acc_cnt').innerText = `총 ${formatNum(totAccCnt)}건`;
+            document.getElementById('ui_tot_today_mcp').innerText = formatNum(totTodayMcp);
+            document.getElementById('ui_tot_today_cnt').innerText = `당일 ${formatNum(totTodayCnt)}건`;
+            document.getElementById('ui_avg_mcp').innerText = formatNum(totAccCnt > 0 ? totAccMcp / totAccCnt : 0) + " MCP";
+
+            let tbody = document.getElementById('productTableBody'); tbody.innerHTML = "";
+            for(let key in groupStats) {
+                let st = groupStats[key];
+                tbody.innerHTML += `<tr><td class="fw-bold">${key}</td><td>${formatNum(st.aM)}</td><td>${formatNum(st.aC)}</td><td class="text-danger fw-bold">${formatNum(st.tM)}</td><td class="text-danger">${formatNum(st.tC)}</td></tr>`;
+            }
+
+            // 우수 모집인 전역 배열 캐싱
+            agentArray = Array.from(agentMap.values());
+            renderAgentUI('mcp'); // 초기 렌더링은 MCP 기준
+
+            // 데모그래픽 초기 렌더링 ('종합')
+            switchDemoGroup('종합');
+
+            // DX 차트 렌더링
+            let dxKeys = Array.from(dxMap.keys());
+            renderChart('dxChart', 'doughnut', dxKeys, dxKeys.map(k=>dxMap.get(k)), ['#198754','#ffc107','#6c757d','#0dcaf0'], '청약 방법 비중');
+
+            // 엑셀용 데이터 패키징
+            globalStats = { totAccMcp, totAccCnt, totTodayMcp, totTodayCnt, groupStats, agentArray };
+
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('dashboardArea').style.display = 'block';
+            document.getElementById('btnExportTop').style.display = 'inline-block';
+
+        } catch (error) {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            alert("시스템 오류: " + error.message);
+            console.error(error);
+        }
+    }
+
+    // --- 6. 서브 렌더링 컨트롤 함수 ---
+    
+    // 모집인 정렬 스위칭 함수
+    function renderAgentUI(sortType) {
+        let isMcp = sortType === 'mcp';
+        let sorted = agentArray.sort((a,b) => isMcp ? b.mcp - a.mcp : b.cnt - a.cnt);
+        let top10 = sorted.slice(0, 10);
+
+        document.getElementById('thTarget').innerText = isMcp ? "누적 실적 (MCP)" : "누적 건수 (건)";
+        
+        let aTbody = document.getElementById('agentTableBody'); aTbody.innerHTML = "";
+        top10.forEach((a, idx) => {
+            let val = isMcp ? formatNum(a.mcp) : formatNum(a.cnt);
+            aTbody.innerHTML += `<tr><td><span class="badge ${idx<3?'bg-danger':'bg-secondary'}">${idx+1}</span></td><td class="text-start fw-bold">${a.display}</td><td class="text-primary fw-bold">${val}</td></tr>`;
+        });
+
+        renderChart('agentChart', 'bar', top10.map(a=>a.display.split('-')[1]), top10.map(a=>isMcp?a.mcp:a.cnt), '#0d6efd', isMcp ? 'MCP 실적' : '계약 건수');
+    }
+
+    // 데모그래픽 상품군 탭 스위칭 함수
+    function switchDemoGroup(groupName) {
+        // UI 버튼 액티브 처리
+        document.querySelectorAll('#demoPills .nav-link').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+
+        document.getElementById('titleAgeChart').innerText = `[${groupName}] 연령대별 가입 비중`;
+        document.getElementById('titleGenderChart').innerText = `[${groupName}] 성별 가입 비중`;
+
+        let dData = demoStats[groupName];
+        let ageKeys = Array.from(Object.keys(dData.age)).sort();
+        let genKeys = Array.from(Object.keys(dData.gen));
+
+        renderChart('ageChart', 'pie', ageKeys, ageKeys.map(k=>dData.age[k]), ['#0dcaf0','#20c997','#ffc107','#fd7e14','#dc3545','#6c757d'], '연령대 분포');
+        renderChart('genderChart', 'doughnut', genKeys, genKeys.map(k=>dData.gen[k]), ['#36a2eb','#ff6384'], '성별 분포');
+    }
+
+    // --- 7. 경영진 보고용 엑셀 다운로드 ---
+    function downloadResultExcel() {
+        if(globalResultData.length <= 1) return alert("다운로드할 데이터가 없습니다.");
+        const wb = XLSX.utils.book_new();
+
+        // 시트 1: 대시보드 요약
+        let dashData = [
+            ["📊 GA 업적 분석 경영진 요약 리포트", "", "", "", ""],
+            ["기준 GRM 사번:", globalGrmId, "추출 일시:", new Date().toLocaleString(), ""],
+            ["", "", "", "", ""],
+            ["[1. 종합 실적 요약]", "", "", "", ""],
+            ["구분", "당일 실적(MCP)", "당일 건수", "누적 실적(MCP)", "누적 건수"],
+            ["전체 통합 실적", globalStats.totTodayMcp, globalStats.totTodayCnt, globalStats.totAccMcp, globalStats.totAccCnt],
+            ["", "", "", "", ""],
+            ["[2. 상품군별 상세]", "당일 실적(MCP)", "당일 건수", "누적 실적(MCP)", "누적 건수"]
+        ];
+
+        for(let key in globalStats.groupStats) {
+            let st = globalStats.groupStats[key];
+            dashData.push([key, st.tM, st.tC, st.aM, st.aC]);
+        }
+
+        dashData.push(["", "", "", "", ""]);
+        dashData.push(["[3. 우수 모집인 Top 10 (파레토 - MCP기준)]", "소속 및 모집인명", "누적 실적(MCP)", "누적 건수", ""]);
+        
+        let top10Mcp = globalStats.agentArray.sort((a,b)=>b.mcp - a.mcp).slice(0, 10);
+        top10Mcp.forEach((a, idx) => { dashData.push([idx + 1, a.display, a.mcp, a.cnt, ""]); });
+
+        const wsDash = XLSX.utils.aoa_to_sheet(dashData);
+        wsDash['!cols'] = [{wch: 35}, {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}];
+        XLSX.utils.book_append_sheet(wb, wsDash, "통계_대시보드(보고용)");
+
+        // 시트 2: 추출된 원시 데이터 (Raw Data)
+        const wsData = XLSX.utils.aoa_to_sheet(globalResultData);
+        XLSX.utils.book_append_sheet(wb, wsData, `${globalGrmId}_계약_RawData`);
+        
+        XLSX.writeFile(wb, `${globalGrmId}_업적분석_최종보고서.xlsx`);
+    }
+</script>
+</body>
+</html>
