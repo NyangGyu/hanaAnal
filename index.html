@@ -44,16 +44,17 @@
     <p class="text-warning mt-2">※ 화면 캡처 및 PDF 생성 시 잠시 화면이 깜빡일 수 있습니다.</p>
 </div>
 
-<div class="container mt-4 mb-5">
+<div class="container mt-4 mb-5" id="mainContainer">
+    
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.5.0</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.5.1</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
-            <button class="btn btn-outline-dark fw-bold" onclick="exportCurrentView()"><i class="bi bi-camera"></i> 화면 캡처</button>
-            <button class="btn btn-danger fw-bold" onclick="exportAggregatedPDF()"><i class="bi bi-file-pdf"></i> 종합 리포트 PDF</button>
+            <button class="btn btn-outline-dark fw-bold" onclick="exportCurrentView()"><i class="bi bi-camera"></i> 화면 캡처(현재 탭)</button>
+            <button class="btn btn-danger fw-bold" onclick="exportAggregatedPDF()"><i class="bi bi-file-pdf"></i> 분석결과 PDF 다운로드</button>
             <button class="btn btn-success fw-bold" onclick="downloadResultExcel()"><i class="bi bi-file-excel"></i> 데이터 엑셀</button>
         </div>
     </div>
@@ -164,9 +165,9 @@
                 <div class="d-flex justify-content-end mb-3">
                     <div class="btn-group shadow-sm" role="group">
                         <input type="radio" class="btn-check" name="agentSort" id="sortMcp" autocomplete="off" checked onchange="changeAgentSort('mcp')">
-                        <label class="btn btn-outline-primary fw-bold px-4" for="sortMcp">💰 누적 MCP 정렬</label>
+                        <label class="btn btn-outline-primary fw-bold px-4" for="sortMcp">💰 조회기간 MCP 정렬</label>
                         <input type="radio" class="btn-check" name="agentSort" id="sortCnt" autocomplete="off" onchange="changeAgentSort('cnt')">
-                        <label class="btn btn-outline-primary fw-bold px-4" for="sortCnt">📄 누적 건수 정렬</label>
+                        <label class="btn btn-outline-primary fw-bold px-4" for="sortCnt">📄 조회기간 건수 정렬</label>
                     </div>
                 </div>
                 
@@ -244,9 +245,7 @@
 
         </div>
     </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</div> <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
     // --- 1. 전역 상태 및 In-Memory 캐싱 ---
@@ -444,7 +443,7 @@
             
             document.getElementById('loadingSpinner').style.display = 'none';
             document.getElementById('dashboardArea').style.display = 'block';
-            document.getElementById('exportBtnGroup').style.display = 'inline-flex'; // v0.5.0 Export 버튼들 표시
+            document.getElementById('exportBtnGroup').style.display = 'inline-flex';
 
             runAggregation();
 
@@ -547,10 +546,11 @@
                 agg.aM += a.stats[grp].aM; agg.aC += a.stats[grp].aC;
                 agg.pM += a.stats[grp].pM; agg.pC += a.stats[grp].pC;
             }
-            if(agg.aC > 0) validAgents.push({ display: a.display, agg: agg });
+            if(agg.pC > 0 || agg.aC > 0) validAgents.push({ display: a.display, agg: agg });
         }
 
-        let sorted = validAgents.sort((a,b) => isMcp ? b.agg.aM - a.agg.aM : b.agg.aC - a.agg.aC);
+        // v0.5.0 정렬 기준: 조회기간 실적(pM) 우선 정렬
+        let sorted = validAgents.sort((a,b) => isMcp ? b.agg.pM - a.agg.pM : b.agg.pC - a.agg.pC);
         let top10 = sorted.slice(0, 10);
 
         let activeNames = Array.from(activeAgentGroups).join('+');
@@ -574,8 +574,8 @@
         }
 
         let chartLabels = top10.map(a => { let parts = a.display.split('-'); return parts.length > 1 ? parts[1].trim() : a.display; });
-        let chartData = top10.map(a => isMcp ? a.agg.aM : a.agg.aC);
-        renderChart('agentChart', 'bar', chartLabels, chartData, '#0d6efd', isMcp ? '누적 실적(MCP)' : '누적 건수');
+        let chartData = top10.map(a => isMcp ? a.agg.pM : a.agg.pC);
+        renderChart('agentChart', 'bar', chartLabels, chartData, '#0d6efd', isMcp ? '조회기간 실적(MCP)' : '조회기간 건수');
     }
 
     function toggleDemoGroup(grp) {
@@ -616,9 +616,8 @@
         renderChart('dxChart', 'doughnut', dxKeys, dxKeys.map(k=>dxMap.get(k)), ['#198754','#ffc107','#6c757d','#0dcaf0'], '청약 방법 비중');
     }
 
-    // --- 7. (v0.5.0) 시각화 캡처 및 PDF 리포트 추출 함수 모음 ---
+    // --- 7. (v0.5.0) 시각화 캡처 및 PDF 리포트 추출 ---
     
-    // 강제 스크롤 해제 헬퍼 함수
     function removeScrollLimits() {
         const scrollAreas = document.querySelectorAll('.table-scroll-area');
         const originalStyles = [];
@@ -630,7 +629,6 @@
         return originalStyles;
     }
     
-    // 강제 스크롤 복구 헬퍼 함수
     function restoreScrollLimits(originalStyles) {
         const scrollAreas = document.querySelectorAll('.table-scroll-area');
         scrollAreas.forEach((area, idx) => {
@@ -638,36 +636,53 @@
         });
     }
 
-    // 7-1. 현재 화면 캡처(단일 페이지 Export)
+    // 7-1. 현재 화면 전체 캡처 (타이틀 + 조회기간 모두 포함)
     async function exportCurrentView() {
         document.getElementById('loadingText').innerText = "현재 화면을 캡처하고 있습니다...";
         document.getElementById('loadingSpinner').style.display = 'flex';
         
+        // v0.5.0 수정: 캡처 시 불필요한 UI 숨김 처리
+        const controlPanel = document.getElementById('controlPanel');
+        const exportBtnGroup = document.getElementById('exportBtnGroup');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        controlPanel.style.display = 'none';
+        exportBtnGroup.style.display = 'none';
+        
         const originalStyles = removeScrollLimits();
-        await new Promise(r => setTimeout(r, 100)); // 렌더링 리플로우 대기
+        await new Promise(r => setTimeout(r, 100)); 
 
         try {
-            // 현재 활성화된 탭의 본문 영역만 캡처
-            const activeTabPane = document.querySelector('.tab-pane.active');
-            const canvas = await html2canvas(activeTabPane, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
-            
+            // 메인 래퍼 통째로 캡처
+            const canvas = await html2canvas(mainContainer, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
             const link = document.createElement('a');
-            link.download = `${globalGrmId}_화면캡처_${Date.now()}.png`;
+            link.download = `${globalGrmId}_대시보드_캡처_${Date.now()}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
         } catch (e) {
             alert('캡처 중 오류가 발생했습니다.');
             console.error(e);
         } finally {
+            // UI 복구
             restoreScrollLimits(originalStyles);
+            controlPanel.style.display = '';
+            exportBtnGroup.style.display = 'inline-flex';
             document.getElementById('loadingSpinner').style.display = 'none';
         }
     }
 
-    // 7-2. 모든 탭 자동 순회 PDF 생성 (Aggregated PDF Export)
+    // 7-2. 모든 탭 자동 순회 PDF 생성 (전체 컨테이너 기준 캡처)
     async function exportAggregatedPDF() {
         document.getElementById('loadingText').innerText = "모든 탭을 순회하며 종합 PDF 보고서를 생성 중입니다...";
         document.getElementById('loadingSpinner').style.display = 'flex';
+
+        // 불필요한 UI 숨김
+        const controlPanel = document.getElementById('controlPanel');
+        const exportBtnGroup = document.getElementById('exportBtnGroup');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        controlPanel.style.display = 'none';
+        exportBtnGroup.style.display = 'none';
 
         try {
             const { jsPDF } = window.jspdf;
@@ -685,31 +700,25 @@
                 'button[data-bs-target="#efficiency"]'
             ];
             
-            // 현재 사용자가 보던 탭 백업
             const activeTabBtn = document.querySelector('#myTab .nav-link.active');
             const originalStyles = removeScrollLimits();
 
             for (let i = 0; i < tabIds.length; i++) {
-                // 1. 탭 강제 전환
                 const tabEl = document.querySelector(tabButtons[i]);
                 const tabIns = new bootstrap.Tab(tabEl);
                 tabIns.show();
 
-                // 2. 렌더링을 위한 안전 대기시간 부여 (표 늘어남 및 차트 대기)
-                await new Promise(r => setTimeout(r, 200));
+                await new Promise(r => setTimeout(r, 300)); // 차트 렌더링 및 탭 애니메이션 대기
 
-                // 3. 해당 탭의 DOM 영역 캡처
-                const targetDom = document.getElementById(tabIds[i]);
-                const canvas = await html2canvas(targetDom, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
+                // 각 탭마다 전체 컨테이너 캡처 (제목/기간 필터 모두 포함)
+                const canvas = await html2canvas(mainContainer, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
                 const imgData = canvas.toDataURL('image/png');
 
-                // 4. 이미지 비율 계산
                 const imgProps = pdf.getImageProperties(imgData);
                 const renderHeight = (imgProps.height * renderWidth) / imgProps.width;
 
                 if (i > 0) pdf.addPage();
                 
-                // 5. 긴 테이블 캡처본(A4 높이 초과)에 대한 멀티 페이지 분할 로직(Hack)
                 let heightLeft = renderHeight;
                 let position = margin;
 
@@ -717,24 +726,27 @@
                 heightLeft -= (pdfHeight - margin * 2);
 
                 while (heightLeft >= 0) {
-                    position = position - pdfHeight; // 이미지를 위로 끌어올림
+                    position = position - pdfHeight; 
                     pdf.addPage();
                     pdf.addImage(imgData, 'PNG', margin, position, renderWidth, renderHeight);
                     heightLeft -= pdfHeight;
                 }
             }
 
-            // 모든 촬영 종료, 복구 작업
-            restoreScrollLimits(originalStyles);
+            pdf.save(`${globalGrmId}_종합분석_리포트_${Date.now()}.pdf`);
+
+            // 원래 보던 탭으로 복귀
             const origTab = new bootstrap.Tab(activeTabBtn);
             origTab.show();
-
-            pdf.save(`${globalGrmId}_종합분석_리포트_${Date.now()}.pdf`);
 
         } catch (e) {
             alert('PDF 생성 중 오류가 발생했습니다.');
             console.error(e);
         } finally {
+            // UI 복구
+            restoreScrollLimits(originalStyles);
+            controlPanel.style.display = '';
+            exportBtnGroup.style.display = 'inline-flex';
             document.getElementById('loadingSpinner').style.display = 'none';
         }
     }
@@ -762,9 +774,9 @@
         });
 
         dashData.push(["", "", "", "", ""]);
-        dashData.push(["[3. 우수 모집인 전체 순위 (종합/누적MCP기준)]", "소속 및 모집인명", "조회기간 실적(MCP)", "조회기간 건수", "누적 실적(MCP)", "누적 건수"]);
+        dashData.push(["[3. 우수 모집인 전체 순위 (조회기간 MCP기준)]", "소속 및 모집인명", "조회기간 실적(MCP)", "조회기간 건수", "누적 실적(MCP)", "누적 건수"]);
         
-        let allAgentsMcp = Array.from(agentMap.values()).sort((a,b)=>b.stats['종합'].aM - a.stats['종합'].aM);
+        let allAgentsMcp = Array.from(agentMap.values()).sort((a,b)=>b.stats['종합'].pM - a.stats['종합'].pM);
         allAgentsMcp.forEach((a, idx) => { 
             dashData.push([idx + 1, a.display, a.stats['종합'].pM, a.stats['종합'].pC, a.stats['종합'].aM, a.stats['종합'].aC]); 
         });
