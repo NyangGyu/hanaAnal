@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GA 업적 분석 대시보드 - Enterprise Edition</title>
+    <title>HanaLife GA 업적 분석 시스템</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -41,7 +41,10 @@
 
 <div class="container mt-4 mb-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>📊 GA 업적 분석 시스템 <span class="badge bg-primary fs-6 align-middle">Enterprise</span></h2>
+        <h2>📊 HanaLife GA 업적 분석 시스템 
+            <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.1.1</span>
+        </h2>
         <button class="btn btn-dark fw-bold shadow-sm" style="display:none;" id="btnExportTop" onclick="downloadResultExcel()">📥 경영진 보고용 엑셀 다운로드</button>
     </div>
 
@@ -224,11 +227,10 @@
         e.preventDefault(); dropZone.classList.remove('dragover');
         if (e.dataTransfer.files.length) {
             targetFileInput.files = e.dataTransfer.files;
-            handleFileSelect({target: targetFileInput}); // 수동으로 핸들러 트리거
+            handleFileSelect({target: targetFileInput}); 
         }
     });
 
-    // 첨부 시 드롭존 디자인을 직관적으로 변경하는 패치 적용
     function handleFileSelect(e) {
         if(e.target.files.length > 0) {
             const fileName = e.target.files[0].name;
@@ -397,7 +399,6 @@
             agentArray = Array.from(agentMap.values());
             renderAgentUI('mcp'); 
 
-            // 260403 버그 완벽 패치: 파라미터 1개만 넘기면 내부 로직에서 자동으로 DOM을 찾아 active 부여
             switchDemoGroup('종합');
 
             let dxKeys = Array.from(dxMap.keys());
@@ -434,14 +435,12 @@
         renderChart('agentChart', 'bar', top10.map(a=>a.display.split('-')[1]), top10.map(a=>isMcp?a.mcp:a.cnt), '#0d6efd', isMcp ? 'MCP 실적' : '계약 건수');
     }
 
-    // 260403 버그 완벽 패치: btnElement 파라미터를 유연하게 처리
     function switchDemoGroup(groupName, btnElement = null) {
         document.querySelectorAll('#demoPills .nav-link').forEach(btn => btn.classList.remove('active'));
         
         if(btnElement) {
-            btnElement.classList.add('active'); // 마우스 클릭에 의한 호출
+            btnElement.classList.add('active'); 
         } else {
-            // 백그라운드 호출 시 해당하는 버튼 DOM을 역추적하여 강제 active 부여
             let defaultBtn = Array.from(document.querySelectorAll('#demoPills .nav-link')).find(b => b.innerText.includes(groupName));
             if(defaultBtn) defaultBtn.classList.add('active');
         }
