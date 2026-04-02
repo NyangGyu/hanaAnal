@@ -41,7 +41,7 @@
 <div class="spinner-overlay" id="loadingSpinner">
     <div class="spinner-border text-primary mb-3" role="status" style="width: 4rem; height: 4rem;"></div>
     <h3 id="loadingText" class="fw-bold">데이터를 분석 중입니다...</h3>
-    <p class="text-warning mt-2">※ 화면 캡처 및 PDF 생성 시 잠시 화면이 깜빡일 수 있습니다.</p>
+    <p class="text-warning mt-2">※ 백그라운드 엔진 가동 중 (멀티스레딩)</p>
 </div>
 
 <div class="container mt-4 mb-5" id="mainContainer">
@@ -49,11 +49,11 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.5.1</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.0</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
-            <button class="btn btn-outline-dark fw-bold" onclick="exportCurrentView()"><i class="bi bi-camera"></i> 화면 캡처(현재 탭)</button>
+            <button class="btn btn-outline-dark fw-bold" onclick="exportCurrentView()"><i class="bi bi-camera"></i> 화면 캡처</button>
             <button class="btn btn-danger fw-bold" onclick="exportAggregatedPDF()"><i class="bi bi-file-pdf"></i> 분석결과 PDF 다운로드</button>
             <button class="btn btn-success fw-bold" onclick="downloadResultExcel()"><i class="bi bi-file-excel"></i> 데이터 엑셀</button>
         </div>
@@ -269,12 +269,11 @@
     let chartInstances = {}; 
     let globalResultData = []; 
     
-    // 차트 애니메이션 글로벌 비활성화 (캡처 시 빈 화면 방지용)
     Chart.defaults.animation = false;
 
     const formatNum = (num) => Math.floor(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
-    // --- 2. 초기화 ---
+    // --- 2. 초기화 (기준 데이터 로드) ---
     window.addEventListener('DOMContentLoaded', async () => {
         const btnStart = document.getElementById('btnStart');
         const grmSelect = document.getElementById('grmIdSelect');
@@ -361,16 +360,7 @@
         }
     }
 
-    // --- 4. 분석 엔진 1단계 ---
-    const readExcelFile = (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(XLSX.read(new Uint8Array(e.target.result), { type: 'array' }));
-            reader.onerror = (e) => reject(e);
-            reader.readAsArrayBuffer(file);
-        });
-    };
-
+    // --- 4. 분석 엔진 1단계 (v0.6.0 Web Worker 통합) ---
     function getAgeGroup(yyyymmdd) {
         if(!yyyymmdd || yyyymmdd.length < 6) return "미상";
         let yy = parseInt(yyyymmdd.substring(0, 2));
@@ -391,7 +381,7 @@
         });
     }
 
-    async function startAnalysis() {
+    function startAnalysis() {
         const grmId = document.getElementById('grmIdSelect').value.trim();
         const targetFile = document.getElementById('targetFile').files[0];
 
@@ -399,61 +389,68 @@
         if(!targetFile) return alert("타겟 데이터 엑셀 파일을 업로드해주세요.");
 
         globalGrmId = grmId;
-        document.getElementById('loadingSpinner').style.display = 'flex';
         
-        try {
-            document.getElementById('loadingText').innerText = "데이터 파싱 중...";
+        let branchSet = globalGrmMap.get(grmId);
+        if(!branchSet) return alert("지점코드 매핑 데이터가 없습니다.");
+
+        document.getElementById('loadingText').innerText = "백그라운드 엔진으로 수만 건 데이터를 파싱 중입니다...";
+        document.getElementById('loadingSpinner').style.display = 'flex';
+
+        // Worker로 전송할 데이터 직렬화
+        const branchArray = Array.from(branchSet);
+        const productObj = Object.fromEntries(globalProductMap);
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const fileBuffer = e.target.result;
             
-            let branchSet = globalGrmMap.get(grmId);
-            if(!branchSet) throw new Error("지점코드 매핑 데이터가 없습니다.");
-
-            const targetWb = await readExcelFile(targetFile);
-            const targetData = XLSX.utils.sheet_to_json(targetWb.Sheets[targetWb.SheetNames[0]], {header: 1});
-
-            globalParsedData = [];
-            globalResultData = [targetData[0]]; 
-
-            for(let r = 1; r < targetData.length; r++) {
-                const row = targetData[r];
-                if(!row || !row[3]) continue;
-                const branchCode = String(row[3]).trim(); 
+            // Web Worker 호출
+            const worker = new Worker('worker.js');
+            
+            worker.onmessage = (msg) => {
+                const { status, parsedData, resultData, message } = msg.data;
                 
-                if(branchSet.has(branchCode)) {
-                    globalResultData.push(row);
-                    let prodName = String(row[21] || "").trim();
-                    globalParsedData.push({
-                        rawDate: String(row[0] || "").replace(/[^\d]/g, ""), 
-                        mcp: Number(String(row[30] || "").replace(/[^\d\.-]/g, "")) || 0,
-                        gName: globalProductMap.get(prodName) || "기타",
-                        agtId: String(row[5] || "").trim(),
-                        agtDisplay: `[${String(row[1] || "").trim()}] ${String(row[2] || "").trim()} - ${String(row[4] || "").trim()}`,
-                        yy: String(row[16] || "").replace(/[^\d]/g, ""),
-                        gen: String(row[17] || "").trim(),
-                        dxType: String(row[34] || "").trim()
-                    });
+                if(status === 'success') {
+                    globalParsedData = parsedData;
+                    globalResultData = resultData;
+                    
+                    let todayStr = new Date().toISOString().split('T')[0];
+                    document.getElementById('startDate').value = todayStr;
+                    document.getElementById('endDate').value = todayStr;
+
+                    var bsCollapse = new bootstrap.Collapse(document.getElementById('controlPanel'), { toggle: false });
+                    bsCollapse.hide();
+                    
+                    document.getElementById('loadingSpinner').style.display = 'none';
+                    document.getElementById('dashboardArea').style.display = 'block';
+                    document.getElementById('exportBtnGroup').style.display = 'inline-flex';
+
+                    runAggregation(); // 동적 재계산 가동
+
+                } else {
+                    document.getElementById('loadingSpinner').style.display = 'none';
+                    alert('엔진 오류: ' + message);
                 }
-            }
+                
+                // 메모리 누수 방지를 위해 워커 즉시 해제
+                worker.terminate();
+            };
 
-            let todayStr = new Date().toISOString().split('T')[0];
-            document.getElementById('startDate').value = todayStr;
-            document.getElementById('endDate').value = todayStr;
+            worker.onerror = (err) => {
+                document.getElementById('loadingSpinner').style.display = 'none';
+                alert('Worker 스레드 오류가 발생했습니다.');
+                console.error(err);
+                worker.terminate();
+            };
 
-            var bsCollapse = new bootstrap.Collapse(document.getElementById('controlPanel'), { toggle: false });
-            bsCollapse.hide();
-            
-            document.getElementById('loadingSpinner').style.display = 'none';
-            document.getElementById('dashboardArea').style.display = 'block';
-            document.getElementById('exportBtnGroup').style.display = 'inline-flex';
-
-            runAggregation();
-
-        } catch (error) {
-            document.getElementById('loadingSpinner').style.display = 'none';
-            alert("시스템 오류: " + error.message);
-        }
+            // 데이터를 Worker로 전송 (Zero-copy transfer 적용으로 메모리 최적화)
+            worker.postMessage({ fileBuffer, branchArray, productObj }, [fileBuffer]);
+        };
+        
+        reader.readAsArrayBuffer(targetFile);
     }
 
-    // --- 5. 분석 엔진 2단계 ---
+    // --- 5. 분석 엔진 2단계 (동적 결합) ---
     function runAggregation() {
         let startVal = document.getElementById('startDate').value.replace(/-/g, '');
         let endVal = document.getElementById('endDate').value.replace(/-/g, '');
@@ -549,7 +546,6 @@
             if(agg.pC > 0 || agg.aC > 0) validAgents.push({ display: a.display, agg: agg });
         }
 
-        // v0.5.0 정렬 기준: 조회기간 실적(pM) 우선 정렬
         let sorted = validAgents.sort((a,b) => isMcp ? b.agg.pM - a.agg.pM : b.agg.pC - a.agg.pC);
         let top10 = sorted.slice(0, 10);
 
@@ -616,8 +612,7 @@
         renderChart('dxChart', 'doughnut', dxKeys, dxKeys.map(k=>dxMap.get(k)), ['#198754','#ffc107','#6c757d','#0dcaf0'], '청약 방법 비중');
     }
 
-    // --- 7. (v0.5.0) 시각화 캡처 및 PDF 리포트 추출 ---
-    
+    // --- 7. 시각화 캡처 및 PDF 리포트 추출 ---
     function removeScrollLimits() {
         const scrollAreas = document.querySelectorAll('.table-scroll-area');
         const originalStyles = [];
@@ -636,12 +631,10 @@
         });
     }
 
-    // 7-1. 현재 화면 전체 캡처 (타이틀 + 조회기간 모두 포함)
     async function exportCurrentView() {
         document.getElementById('loadingText').innerText = "현재 화면을 캡처하고 있습니다...";
         document.getElementById('loadingSpinner').style.display = 'flex';
         
-        // v0.5.0 수정: 캡처 시 불필요한 UI 숨김 처리
         const controlPanel = document.getElementById('controlPanel');
         const exportBtnGroup = document.getElementById('exportBtnGroup');
         const mainContainer = document.getElementById('mainContainer');
@@ -653,7 +646,6 @@
         await new Promise(r => setTimeout(r, 100)); 
 
         try {
-            // 메인 래퍼 통째로 캡처
             const canvas = await html2canvas(mainContainer, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
             const link = document.createElement('a');
             link.download = `${globalGrmId}_대시보드_캡처_${Date.now()}.png`;
@@ -663,7 +655,6 @@
             alert('캡처 중 오류가 발생했습니다.');
             console.error(e);
         } finally {
-            // UI 복구
             restoreScrollLimits(originalStyles);
             controlPanel.style.display = '';
             exportBtnGroup.style.display = 'inline-flex';
@@ -671,12 +662,10 @@
         }
     }
 
-    // 7-2. 모든 탭 자동 순회 PDF 생성 (전체 컨테이너 기준 캡처)
     async function exportAggregatedPDF() {
         document.getElementById('loadingText').innerText = "모든 탭을 순회하며 종합 PDF 보고서를 생성 중입니다...";
         document.getElementById('loadingSpinner').style.display = 'flex';
 
-        // 불필요한 UI 숨김
         const controlPanel = document.getElementById('controlPanel');
         const exportBtnGroup = document.getElementById('exportBtnGroup');
         const mainContainer = document.getElementById('mainContainer');
@@ -708,9 +697,8 @@
                 const tabIns = new bootstrap.Tab(tabEl);
                 tabIns.show();
 
-                await new Promise(r => setTimeout(r, 300)); // 차트 렌더링 및 탭 애니메이션 대기
+                await new Promise(r => setTimeout(r, 300)); 
 
-                // 각 탭마다 전체 컨테이너 캡처 (제목/기간 필터 모두 포함)
                 const canvas = await html2canvas(mainContainer, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
                 const imgData = canvas.toDataURL('image/png');
 
@@ -735,7 +723,6 @@
 
             pdf.save(`${globalGrmId}_종합분석_리포트_${Date.now()}.pdf`);
 
-            // 원래 보던 탭으로 복귀
             const origTab = new bootstrap.Tab(activeTabBtn);
             origTab.show();
 
@@ -743,7 +730,6 @@
             alert('PDF 생성 중 오류가 발생했습니다.');
             console.error(e);
         } finally {
-            // UI 복구
             restoreScrollLimits(originalStyles);
             controlPanel.style.display = '';
             exportBtnGroup.style.display = 'inline-flex';
@@ -751,7 +737,7 @@
         }
     }
 
-    // --- 8. 기존 데이터 엑셀 다운로드 ---
+    // --- 8. 데이터 엑셀 다운로드 ---
     function downloadResultExcel() {
         if(globalResultData.length <= 1) return alert("다운로드할 데이터가 없습니다.");
         const wb = XLSX.utils.book_new();
