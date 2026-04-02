@@ -26,7 +26,7 @@
         }
         .chart-container { position: relative; height: 320px; width: 100%; }
         
-        /* Nav Pills for Demographics */
+        /* Nav Pills for Demographics & Agents */
         .nav-pills .nav-link { border-radius: 50px; margin-right: 5px; font-weight: 600; color: #495057; background-color: #e9ecef; transition: all 0.2s ease; cursor: pointer; }
         .nav-pills .nav-link.active { background-color: #198754; color: white; }
     </style>
@@ -43,9 +43,9 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.1.1</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.2.0</span>
         </h2>
-        <button class="btn btn-dark fw-bold shadow-sm" style="display:none;" id="btnExportTop" onclick="downloadResultExcel()">📥 경영진 보고용 엑셀 다운로드</button>
+        <button class="btn btn-dark fw-bold shadow-sm" style="display:none;" id="btnExportTop" onclick="downloadResultExcel()">📥 분석결과 엑셀 다운로드</button>
     </div>
 
     <div class="collapse show" id="controlPanel">
@@ -123,27 +123,49 @@
             </div>
 
             <div class="tab-pane fade" id="agents" role="tabpanel">
+                <div class="card shadow border-0 mb-4">
+                    <div class="card-body text-center bg-light rounded">
+                        <ul class="nav nav-pills justify-content-center" id="agentPills">
+                            <li class="nav-item"><a class="nav-link active px-4" onclick="switchAgentGroup('종합', this)">전체 종합</a></li>
+                            <li class="nav-item"><a class="nav-link px-4" onclick="switchAgentGroup('종신', this)">종신</a></li>
+                            <li class="nav-item"><a class="nav-link px-4" onclick="switchAgentGroup('변액', this)">변액</a></li>
+                            <li class="nav-item"><a class="nav-link px-4" onclick="switchAgentGroup('건강', this)">건강</a></li>
+                            <li class="nav-item"><a class="nav-link px-4" onclick="switchAgentGroup('연금', this)">연금</a></li>
+                        </ul>
+                    </div>
+                </div>
+
                 <div class="d-flex justify-content-end mb-3">
                     <div class="btn-group shadow-sm" role="group">
-                        <input type="radio" class="btn-check" name="agentSort" id="sortMcp" autocomplete="off" checked onchange="renderAgentUI('mcp')">
+                        <input type="radio" class="btn-check" name="agentSort" id="sortMcp" autocomplete="off" checked onchange="changeAgentSort('mcp')">
                         <label class="btn btn-outline-primary fw-bold px-4" for="sortMcp">💰 MCP 기준 정렬</label>
-                        <input type="radio" class="btn-check" name="agentSort" id="sortCnt" autocomplete="off" onchange="renderAgentUI('cnt')">
+                        <input type="radio" class="btn-check" name="agentSort" id="sortCnt" autocomplete="off" onchange="changeAgentSort('cnt')">
                         <label class="btn btn-outline-primary fw-bold px-4" for="sortCnt">📄 건수 기준 정렬</label>
                     </div>
                 </div>
+                
                 <div class="row g-4">
-                    <div class="col-md-7">
+                    <div class="col-12">
                         <div class="card shadow border-0 h-100">
-                            <div class="card-header bg-white fw-bold">Top 10 모집인 퍼포먼스</div>
+                            <div class="card-header bg-white fw-bold" id="agentChartTitle">[종합] Top 10 모집인 퍼포먼스</div>
                             <div class="card-body"><div class="chart-container"><canvas id="agentChart"></canvas></div></div>
                         </div>
                     </div>
-                    <div class="col-md-5">
+                    <div class="col-12">
                         <div class="card shadow border-0 h-100">
-                            <div class="card-header bg-white fw-bold">파레토 법칙 (상위 퍼포머 명단)</div>
-                            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                            <div class="card-header bg-white fw-bold text-primary fs-5"><i class="bi bi-trophy-fill"></i> 모집인 퍼포먼스 순위 (전체)</div>
+                            <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
                                 <table class="table table-hover mb-0 text-center align-middle">
-                                    <thead class="table-light sticky-top"><tr><th>순위</th><th>소속 및 모집인명</th><th id="thTarget">실적/건수</th></tr></thead>
+                                    <thead class="table-light sticky-top shadow-sm">
+                                        <tr>
+                                            <th>순위</th>
+                                            <th>소속 및 모집인명</th>
+                                            <th>누적 실적 (MCP)</th>
+                                            <th>누적 건수</th>
+                                            <th class="text-success">당일 실적 (MCP)</th>
+                                            <th class="text-success">당일 건수</th>
+                                        </tr>
+                                    </thead>
                                     <tbody id="agentTableBody"></tbody>
                                 </table>
                             </div>
@@ -192,7 +214,7 @@
                         <div class="card shadow border-0 h-100 bg-light d-flex flex-column justify-content-center align-items-center text-center p-5">
                             <h3 class="text-secondary mb-4">지점 평균 객단가 (1건당 수익성)</h3>
                             <h1 id="ui_avg_mcp" class="display-3 fw-bold text-primary mb-3">0</h1>
-                            <p class="text-muted fs-5">객단가가 높을수록 고부가가치 상품(종신, 통합 등)의<br>영업 비중 및 질적 성장이 뛰어남을 의미합니다.</p>
+                            <p class="text-muted fs-6">객단가가 높을수록 고부가가치 상품(종신, 통합 등)의<br>영업 비중 및 질적 성장이 뛰어남을 의미합니다.</p>
                         </div>
                     </div>
                 </div>
@@ -214,6 +236,10 @@
     const groupTypes = ['종합', '종신', '변액', '건강', '연금'];
     let demoStats = {}; 
     let agentArray = []; 
+    
+    // 모집인 탭 상태 관리
+    let currentAgentGroup = '종합';
+    let currentAgentSort = 'mcp';
 
     const formatNum = (num) => Math.floor(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
@@ -316,7 +342,7 @@
                 if(prodData[r] && prodData[r][0]) productMap.set(String(prodData[r][0]).trim(), String(prodData[r][1]).trim());
             }
 
-            document.getElementById('loadingText').innerText = "초고속 매칭 및 다각도 분석 엔진 가동 중...";
+            document.getElementById('loadingText').innerText = "초고속 매칭 및 다차원 분석 엔진 가동 중...";
             const targetWb = await readExcelFile(targetFile);
             const targetData = XLSX.utils.sheet_to_json(targetWb.Sheets[targetWb.SheetNames[0]], {header: 1});
 
@@ -324,12 +350,14 @@
             
             let totAccMcp = 0, totAccCnt = 0, totTodayMcp = 0, totTodayCnt = 0;
             let groupStats = { "변액":{aM:0,aC:0,tM:0,tC:0}, "연금":{aM:0,aC:0,tM:0,tC:0}, "종신":{aM:0,aC:0,tM:0,tC:0}, "건강":{aM:0,aC:0,tM:0,tC:0} };
-            let agentMap = new Map(); 
             let dxMap = new Map();
+            let agentMap = new Map(); // v0.2.0: 3D 구조체용 Map
 
+            // 구조체 초기화
             groupTypes.forEach(g => demoStats[g] = { age: {}, gen: {} });
             globalResultData = [targetData[0]]; 
 
+            // 데이터 순회 (Row by Row)
             for(let r = 1; r < targetData.length; r++) {
                 const row = targetData[r];
                 if(!row || !row[3]) continue;
@@ -350,21 +378,50 @@
                     let gen = String(row[17] || "").trim(); 
                     let dxType = String(row[34] || "").trim(); 
 
+                    // 전체 합계
                     totAccMcp += mcp; totAccCnt++;
                     if(rawDate === sToday) { totTodayMcp += mcp; totTodayCnt++; }
 
+                    // 상품군 식별
                     let gName = productMap.get(prodName) || "기타";
                     if(groupStats[gName]) {
                         groupStats[gName].aM += mcp; groupStats[gName].aC++;
                         if(rawDate === sToday) { groupStats[gName].tM += mcp; groupStats[gName].tC++; }
                     }
 
+                    // v0.2.0: 모집인 다차원 데이터 캐싱 (종합 + 상품군별 당일/누적)
                     if(agtId) {
                         let displayStr = `[${agtAgency}] ${agtBranch} - ${agtName}`;
-                        let cur = agentMap.get(agtId) || { display: displayStr, mcp: 0, cnt: 0 };
-                        agentMap.set(agtId, { display: cur.display, mcp: cur.mcp + mcp, cnt: cur.cnt + 1 });
+                        
+                        // 모집인이 맵에 없으면 3D 구조체 뼈대 생성
+                        if(!agentMap.has(agtId)) {
+                            let initStats = {};
+                            groupTypes.forEach(g => initStats[g] = {aM: 0, aC: 0, tM: 0, tC: 0});
+                            agentMap.set(agtId, { display: displayStr, stats: initStats });
+                        }
+                        
+                        let aData = agentMap.get(agtId);
+                        
+                        // [1] 종합 실적 합산
+                        aData.stats['종합'].aM += mcp;
+                        aData.stats['종합'].aC += 1;
+                        if(rawDate === sToday) {
+                            aData.stats['종합'].tM += mcp;
+                            aData.stats['종합'].tC += 1;
+                        }
+                        
+                        // [2] 특정 상품군 실적 합산
+                        if(aData.stats[gName]) {
+                            aData.stats[gName].aM += mcp;
+                            aData.stats[gName].aC += 1;
+                            if(rawDate === sToday) {
+                                aData.stats[gName].tM += mcp;
+                                aData.stats[gName].tC += 1;
+                            }
+                        }
                     }
 
+                    // 데모그래픽
                     let ageGroup = getAgeGroup(yy);
                     if(gen) {
                         demoStats['종합'].age[ageGroup] = (demoStats['종합'].age[ageGroup] || 0) + 1;
@@ -376,6 +433,7 @@
                         }
                     }
 
+                    // DX
                     if(dxType) dxMap.set(dxType, (dxMap.get(dxType) || 0) + 1);
                 }
             }
@@ -396,14 +454,16 @@
                 tbody.innerHTML += `<tr><td class="fw-bold">${key}</td><td>${formatNum(st.aM)}</td><td>${formatNum(st.aC)}</td><td class="text-danger fw-bold">${formatNum(st.tM)}</td><td class="text-danger">${formatNum(st.tC)}</td></tr>`;
             }
 
+            // 모집인 및 데모그래픽 초기 렌더링
             agentArray = Array.from(agentMap.values());
-            renderAgentUI('mcp'); 
-
+            switchAgentGroup('종합'); 
             switchDemoGroup('종합');
 
+            // DX 차트 렌더링
             let dxKeys = Array.from(dxMap.keys());
             renderChart('dxChart', 'doughnut', dxKeys, dxKeys.map(k=>dxMap.get(k)), ['#198754','#ffc107','#6c757d','#0dcaf0'], '청약 방법 비중');
 
+            // 엑셀용 데이터 패키징
             globalStats = { totAccMcp, totAccCnt, totTodayMcp, totTodayCnt, groupStats, agentArray };
 
             document.getElementById('loadingSpinner').style.display = 'none';
@@ -418,21 +478,68 @@
     }
 
     // --- 6. 서브 렌더링 컨트롤 함수 ---
-    
-    function renderAgentUI(sortType) {
-        let isMcp = sortType === 'mcp';
-        let sorted = agentArray.sort((a,b) => isMcp ? b.mcp - a.mcp : b.cnt - a.cnt);
+
+    // v0.2.0 추가: 모집인 상품군 스위칭
+    function switchAgentGroup(groupName, btnElement = null) {
+        document.querySelectorAll('#agentPills .nav-link').forEach(btn => btn.classList.remove('active'));
+        if(btnElement) {
+            btnElement.classList.add('active'); 
+        } else {
+            let defaultBtn = Array.from(document.querySelectorAll('#agentPills .nav-link')).find(b => b.innerText.includes(groupName));
+            if(defaultBtn) defaultBtn.classList.add('active');
+        }
+        currentAgentGroup = groupName;
+        renderAgentUI();
+    }
+
+    function changeAgentSort(sortType) {
+        currentAgentSort = sortType;
+        renderAgentUI();
+    }
+
+    // v0.2.0 개편: 다차원 데이터 기반 UI 렌더러
+    function renderAgentUI() {
+        let isMcp = currentAgentSort === 'mcp';
+        let grp = currentAgentGroup;
+
+        // 선택된 탭(상품군)에 실적이 1건이라도 있는 인원만 필터링
+        let validAgents = agentArray.filter(a => a.stats[grp].aC > 0);
+        
+        // 정렬
+        let sorted = validAgents.sort((a,b) => isMcp ? b.stats[grp].aM - a.stats[grp].aM : b.stats[grp].aC - a.stats[grp].aC);
         let top10 = sorted.slice(0, 10);
 
-        document.getElementById('thTarget').innerText = isMcp ? "누적 실적 (MCP)" : "누적 건수 (건)";
+        document.getElementById('agentChartTitle').innerText = `[${grp}] Top 10 모집인 퍼포먼스`;
         
-        let aTbody = document.getElementById('agentTableBody'); aTbody.innerHTML = "";
-        top10.forEach((a, idx) => {
-            let val = isMcp ? formatNum(a.mcp) : formatNum(a.cnt);
-            aTbody.innerHTML += `<tr><td><span class="badge ${idx<3?'bg-danger':'bg-secondary'}">${idx+1}</span></td><td class="text-start fw-bold">${a.display}</td><td class="text-primary fw-bold">${val}</td></tr>`;
-        });
+        // 테이블 렌더링 (전체 인원)
+        let aTbody = document.getElementById('agentTableBody'); 
+        aTbody.innerHTML = "";
+        
+        if(sorted.length === 0) {
+            aTbody.innerHTML = `<tr><td colspan="6" class="text-muted py-4">해당 상품군의 실적이 존재하지 않습니다.</td></tr>`;
+        } else {
+            sorted.forEach((a, idx) => {
+                let st = a.stats[grp];
+                aTbody.innerHTML += `
+                    <tr>
+                        <td><span class="badge ${idx<3?'bg-danger':'bg-secondary'}">${idx+1}</span></td>
+                        <td class="text-start fw-bold text-dark">${a.display}</td>
+                        <td class="text-primary fw-bold">${formatNum(st.aM)}</td>
+                        <td>${formatNum(st.aC)}</td>
+                        <td class="text-success fw-bold">${formatNum(st.tM)}</td>
+                        <td>${formatNum(st.tC)}</td>
+                    </tr>`;
+            });
+        }
 
-        renderChart('agentChart', 'bar', top10.map(a=>a.display.split('-')[1]), top10.map(a=>isMcp?a.mcp:a.cnt), '#0d6efd', isMcp ? 'MCP 실적' : '계약 건수');
+        // 차트 렌더링 (Top 10)
+        let chartLabels = top10.map(a => {
+            let parts = a.display.split('-');
+            return parts.length > 1 ? parts[1].trim() : a.display; // 이름만 추출
+        });
+        let chartData = top10.map(a => isMcp ? a.stats[grp].aM : a.stats[grp].aC);
+        
+        renderChart('agentChart', 'bar', chartLabels, chartData, '#0d6efd', isMcp ? '누적 실적(MCP)' : '누적 건수');
     }
 
     function switchDemoGroup(groupName, btnElement = null) {
@@ -456,13 +563,13 @@
         renderChart('genderChart', 'doughnut', genKeys, genKeys.map(k=>dData.gen[k]), ['#36a2eb','#ff6384'], '성별 분포');
     }
 
-    // --- 7. 경영진 보고용 엑셀 다운로드 ---
+    // --- 7. 분석결과 엑셀 다운로드 (v0.2.0 호환성 패치) ---
     function downloadResultExcel() {
         if(globalResultData.length <= 1) return alert("다운로드할 데이터가 없습니다.");
         const wb = XLSX.utils.book_new();
 
         let dashData = [
-            ["📊 GA 업적 분석 경영진 요약 리포트", "", "", "", ""],
+            ["📊 HanaLife GA 업적 분석 리포트", "", "", "", ""],
             ["기준 GRM 사번:", globalGrmId, "추출 일시:", new Date().toLocaleString(), ""],
             ["", "", "", "", ""],
             ["[1. 종합 실적 요약]", "", "", "", ""],
@@ -478,10 +585,11 @@
         }
 
         dashData.push(["", "", "", "", ""]);
-        dashData.push(["[3. 우수 모집인 Top 10 (파레토 - MCP기준)]", "소속 및 모집인명", "누적 실적(MCP)", "누적 건수", ""]);
+        dashData.push(["[3. 우수 모집인 Top 10 (종합/MCP기준)]", "소속 및 모집인명", "누적 실적(MCP)", "누적 건수", ""]);
         
-        let top10Mcp = globalStats.agentArray.sort((a,b)=>b.mcp - a.mcp).slice(0, 10);
-        top10Mcp.forEach((a, idx) => { dashData.push([idx + 1, a.display, a.mcp, a.cnt, ""]); });
+        // 엑셀은 '종합' 데이터 기준으로 Top 10 추출
+        let top10Mcp = globalStats.agentArray.sort((a,b)=>b.stats['종합'].aM - a.stats['종합'].aM).slice(0, 10);
+        top10Mcp.forEach((a, idx) => { dashData.push([idx + 1, a.display, a.stats['종합'].aM, a.stats['종합'].aC, ""]); });
 
         const wsDash = XLSX.utils.aoa_to_sheet(dashData);
         wsDash['!cols'] = [{wch: 35}, {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}];
