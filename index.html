@@ -40,8 +40,8 @@
 
 <div class="spinner-overlay" id="loadingSpinner">
     <div class="spinner-border text-primary mb-3" role="status" style="width: 4rem; height: 4rem;"></div>
-    <h3 id="loadingText" class="fw-bold">데이터를 분석 중입니다...</h3>
-    <p class="text-warning mt-2">※ 백그라운드 엔진 가동 중 (멀티스레딩)</p>
+    <h3 id="loadingText" class="fw-bold">데이터를 처리 중입니다...</h3>
+    <p class="text-warning mt-2">※ 백그라운드 엔진 가동 중</p>
 </div>
 
 <div class="container mt-4 mb-5" id="mainContainer">
@@ -49,7 +49,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.3</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.4</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
@@ -189,7 +189,13 @@
                         <div class="card shadow border-0 h-100">
                             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                                 <span class="fw-bold text-primary fs-5"><i class="bi bi-trophy-fill"></i> 모집인 퍼포먼스 순위 (전체)</span>
-                                <button class="btn btn-sm btn-outline-success fw-bold shadow-sm" onclick="downloadCurrentAgentExcel()"><i class="bi bi-file-earmark-arrow-down"></i> 현재 순위 엑셀 다운로드</button>
+                                <div class="d-flex gap-2">
+                                    <select id="agentExcelExportType" class="form-select form-select-sm fw-bold border-success text-success shadow-sm" style="width: auto;">
+                                        <option value="current" selected>현재 데이터</option>
+                                        <option value="all_categories">카테고리별 전체 데이터</option>
+                                    </select>
+                                    <button class="btn btn-sm btn-outline-success fw-bold shadow-sm" onclick="downloadAgentExcel()"><i class="bi bi-file-earmark-arrow-down"></i> 모집인 퍼포먼스 순위 엑셀 다운로드</button>
+                                </div>
                             </div>
                             <div class="card-body p-0 table-scroll-area" style="max-height: 500px; overflow-y: auto;">
                                 <table class="table table-hover mb-0 text-center align-middle">
@@ -298,12 +304,12 @@
         return `${y}-${m}-${d}`;
     }
 
-    // --- v0.6.3 추가: 엑셀 숫자 포맷팅(천 단위 콤마) 유틸리티 ---
+    // 엑셀 숫자 포맷팅(천 단위 콤마) 유틸리티
     function applyExcelNumberFormat(ws) {
         for (let key in ws) {
-            if (key[0] === '!') continue; // 특수 키(!ref, !cols 등) 건너뛰기
-            if (ws[key].t === 'n') {      // 셀의 데이터 타입이 숫자(Number)인 경우
-                ws[key].z = '#,##0';      // 천 단위 콤마 엑셀 서식 주입
+            if (key[0] === '!') continue; 
+            if (ws[key].t === 'n') {      
+                ws[key].z = '#,##0';      
             }
         }
     }
@@ -801,45 +807,108 @@
 
     // --- 8. 데이터 엑셀 다운로드 ---
     
-    // 8-1. 현재 화면 속 모집인 순위 데이터만 단독 추출
-    function downloadCurrentAgentExcel() {
-        if(currentSortedAgents.length === 0) return alert("다운로드할 데이터가 없습니다.");
-        
-        const wb = XLSX.utils.book_new();
-        
+    // 8-1. v0.6.4 수정: 다중 시트 분할 생성 로직 포함 모집인 순위 추출
+    function downloadAgentExcel() {
+        const exportType = document.getElementById('agentExcelExportType').value;
         let sDate = document.getElementById('startDate').value;
         let eDate = document.getElementById('endDate').value;
-        let activeNames = Array.from(activeAgentGroups).join(' + ');
-        let sortName = currentAgentSort === 'mcp' ? '조회기간 MCP 우선' : '조회기간 건수 우선';
+        let isMcp = currentAgentSort === 'mcp';
+        let sortName = isMcp ? '조회기간 MCP 우선' : '조회기간 건수 우선';
 
-        let wsData = [
-            ["🏆 우수 모집인 퍼포먼스 순위 리포트"],
-            ["조회 기간:", `${sDate} ~ ${eDate}`],
-            ["선택 상품군:", activeNames],
-            ["정렬 기준:", sortName],
-            [""], 
-            ["순위", "소속 및 모집인명", "조회기간 실적(MCP)", "조회기간 건수", "누적 실적(MCP)", "누적 건수"]
-        ];
+        if (exportType === 'current') {
+            // [현재 데이터] 모드: 화면에 띄워진 기존 데이터만 단독 추출
+            if(currentSortedAgents.length === 0) return alert("다운로드할 데이터가 없습니다.");
+            
+            const wb = XLSX.utils.book_new();
+            let activeNames = Array.from(activeAgentGroups).join(' + ');
 
-        currentSortedAgents.forEach((a, idx) => {
-            wsData.push([
-                idx + 1,
-                a.display,
-                a.agg.pM, 
-                a.agg.pC, 
-                a.agg.aM, 
-                a.agg.aC  
-            ]);
-        });
+            let wsData = [
+                ["🏆 우수 모집인 퍼포먼스 순위 리포트"],
+                ["조회 기간:", `${sDate} ~ ${eDate}`],
+                ["선택 상품군:", activeNames],
+                ["정렬 기준:", sortName],
+                [""], 
+                ["순위", "소속 및 모집인명", "조회기간 실적(MCP)", "조회기간 건수", "누적 실적(MCP)", "누적 건수"]
+            ];
 
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        ws['!cols'] = [{wch: 10}, {wch: 35}, {wch: 20}, {wch: 15}, {wch: 20}, {wch: 15}];
-        
-        // v0.6.3 추가: 엑셀 숫자 포맷팅 함수 호출
-        applyExcelNumberFormat(ws);
-        
-        XLSX.utils.book_append_sheet(wb, ws, "모집인_퍼포먼스_순위");
-        XLSX.writeFile(wb, `${globalGrmId}_모집인순위_${activeNames.replace(/ \+ /g, '')}_${Date.now()}.xlsx`);
+            currentSortedAgents.forEach((a, idx) => {
+                wsData.push([idx + 1, a.display, a.agg.pM, a.agg.pC, a.agg.aM, a.agg.aC]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            ws['!cols'] = [{wch: 10}, {wch: 35}, {wch: 20}, {wch: 15}, {wch: 20}, {wch: 15}];
+            applyExcelNumberFormat(ws);
+            XLSX.utils.book_append_sheet(wb, ws, "모집인_퍼포먼스_순위");
+            XLSX.writeFile(wb, `${globalGrmId}_모집인순위_${activeNames.replace(/ \+ /g, '')}_${Date.now()}.xlsx`);
+
+        } else {
+            // [카테고리별 전체 데이터] 모드: 다중 시트 생성 및 빈 시트 생략 로직
+            document.getElementById('loadingText').innerText = "카테고리별 다중 시트 엑셀을 생성 중입니다...";
+            document.getElementById('loadingSpinner').style.display = 'flex';
+
+            // 비동기 양보(Yield)를 통해 스피너가 그려질 시간을 줌
+            setTimeout(() => {
+                try {
+                    const wb = XLSX.utils.book_new();
+                    const categories = ['종합', '종신', '변액', '건강', '연금'];
+
+                    categories.forEach(cat => {
+                        let validAgents = [];
+                        // 해당 카테고리에 실적이 1건이라도 있는 모집인 필터링
+                        for (let a of agentMap.values()) {
+                            let stats = a.stats[cat];
+                            if (stats && (stats.pC > 0 || stats.aC > 0)) {
+                                validAgents.push({ display: a.display, stats: stats });
+                            }
+                        }
+
+                        // 실적이 없으면 해당 카테고리 시트 생성 생략 (연금 등 빈 시트 방지)
+                        if (validAgents.length === 0) return; 
+
+                        validAgents.sort((a, b) => {
+                            if (isMcp) {
+                                if (b.stats.pM !== a.stats.pM) return b.stats.pM - a.stats.pM;
+                                return b.stats.aM - a.stats.aM;
+                            } else {
+                                if (b.stats.pC !== a.stats.pC) return b.stats.pC - a.stats.pC;
+                                return b.stats.aC - a.stats.aC;
+                            }
+                        });
+
+                        let wsData = [
+                            [`🏆 우수 모집인 퍼포먼스 순위 리포트 - ${cat}`],
+                            ["조회 기간:", `${sDate} ~ ${eDate}`],
+                            ["선택 상품군:", cat],
+                            ["정렬 기준:", sortName],
+                            [""],
+                            ["순위", "소속 및 모집인명", "조회기간 실적(MCP)", "조회기간 건수", "누적 실적(MCP)", "누적 건수"]
+                        ];
+
+                        validAgents.forEach((a, idx) => {
+                            wsData.push([idx + 1, a.display, a.stats.pM, a.stats.pC, a.stats.aM, a.stats.aC]);
+                        });
+
+                        const ws = XLSX.utils.aoa_to_sheet(wsData);
+                        ws['!cols'] = [{wch: 10}, {wch: 35}, {wch: 20}, {wch: 15}, {wch: 20}, {wch: 15}];
+                        applyExcelNumberFormat(ws);
+                        XLSX.utils.book_append_sheet(wb, ws, cat); 
+                    });
+
+                    // 생성된 시트가 1개도 없을 경우의 안전장치
+                    if (wb.SheetNames.length === 0) {
+                        alert("선택하신 기간에 출력할 실적 데이터가 없습니다.");
+                    } else {
+                        XLSX.writeFile(wb, `${globalGrmId}_모집인순위_카테고리전체_${Date.now()}.xlsx`);
+                    }
+
+                } catch(e) {
+                    console.error(e);
+                    alert('엑셀 생성 중 오류가 발생했습니다.');
+                } finally {
+                    document.getElementById('loadingSpinner').style.display = 'none';
+                }
+            }, 100);
+        }
     }
 
     // 8-2. 전체 데이터 원본 엑셀 추출
@@ -875,13 +944,11 @@
         const wsDash = XLSX.utils.aoa_to_sheet(dashData);
         wsDash['!cols'] = [{wch: 35}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 20}];
         
-        // v0.6.3 추가: 요약 시트 숫자 포맷팅 호출
         applyExcelNumberFormat(wsDash);
         XLSX.utils.book_append_sheet(wb, wsDash, "통계_대시보드(보고용)");
 
         const wsData = XLSX.utils.aoa_to_sheet(globalResultData);
         
-        // v0.6.3 추가: 원시 데이터 시트 숫자 포맷팅 호출 (MCP, 금액 등 필드 자동 포맷팅)
         applyExcelNumberFormat(wsData);
         XLSX.utils.book_append_sheet(wb, wsData, `${globalGrmId}_계약_RawData`);
         
