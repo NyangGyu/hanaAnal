@@ -49,7 +49,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.2</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.3</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
@@ -278,9 +278,7 @@
     let activeDemoGroups = new Set(['종합']);
     let currentAgentSort = 'mcp';
     
-    // v0.6.2 추가: 현재 화면에 보이는 정렬된 모집인 배열을 담아둘 전역 캐시
     let currentSortedAgents = [];
-
     let chartInstances = {}; 
     let globalResultData = []; 
     
@@ -298,6 +296,16 @@
         const m = String(dateObj.getMonth() + 1).padStart(2, '0');
         const d = String(dateObj.getDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
+    }
+
+    // --- v0.6.3 추가: 엑셀 숫자 포맷팅(천 단위 콤마) 유틸리티 ---
+    function applyExcelNumberFormat(ws) {
+        for (let key in ws) {
+            if (key[0] === '!') continue; // 특수 키(!ref, !cols 등) 건너뛰기
+            if (ws[key].t === 'n') {      // 셀의 데이터 타입이 숫자(Number)인 경우
+                ws[key].z = '#,##0';      // 천 단위 콤마 엑셀 서식 주입
+            }
+        }
     }
 
     // --- 2. 초기화 ---
@@ -599,7 +607,6 @@
             }
         });
         
-        // v0.6.2 핵심 추가: 현재 화면에 그려질 데이터를 전역 변수에 백업(캐싱)
         currentSortedAgents = sorted;
         
         let top10 = sorted.slice(0, 10);
@@ -794,25 +801,23 @@
 
     // --- 8. 데이터 엑셀 다운로드 ---
     
-    // 8-1. v0.6.2 추가: 현재 필터링된 화면 속 모집인 순위 데이터만 단독 추출
+    // 8-1. 현재 화면 속 모집인 순위 데이터만 단독 추출
     function downloadCurrentAgentExcel() {
         if(currentSortedAgents.length === 0) return alert("다운로드할 데이터가 없습니다.");
         
         const wb = XLSX.utils.book_new();
         
-        // 메타데이터 수집 (사용자가 어떤 조건으로 뽑았는지 명시)
         let sDate = document.getElementById('startDate').value;
         let eDate = document.getElementById('endDate').value;
         let activeNames = Array.from(activeAgentGroups).join(' + ');
         let sortName = currentAgentSort === 'mcp' ? '조회기간 MCP 우선' : '조회기간 건수 우선';
 
-        // 엑셀 2차원 배열 조립
         let wsData = [
             ["🏆 우수 모집인 퍼포먼스 순위 리포트"],
             ["조회 기간:", `${sDate} ~ ${eDate}`],
             ["선택 상품군:", activeNames],
             ["정렬 기준:", sortName],
-            [""], // 빈 줄
+            [""], 
             ["순위", "소속 및 모집인명", "조회기간 실적(MCP)", "조회기간 건수", "누적 실적(MCP)", "누적 건수"]
         ];
 
@@ -820,24 +825,24 @@
             wsData.push([
                 idx + 1,
                 a.display,
-                a.agg.pM, // 기간 실적
-                a.agg.pC, // 기간 건수
-                a.agg.aM, // 누적 실적
-                a.agg.aC  // 누적 건수
+                a.agg.pM, 
+                a.agg.pC, 
+                a.agg.aM, 
+                a.agg.aC  
             ]);
         });
 
         const ws = XLSX.utils.aoa_to_sheet(wsData);
-        // 열 너비(넓이) 보기 좋게 포맷팅
         ws['!cols'] = [{wch: 10}, {wch: 35}, {wch: 20}, {wch: 15}, {wch: 20}, {wch: 15}];
         
-        XLSX.utils.book_append_sheet(wb, ws, "모집인_퍼포먼스_순위");
+        // v0.6.3 추가: 엑셀 숫자 포맷팅 함수 호출
+        applyExcelNumberFormat(ws);
         
-        // 파일명에 사용자가 클릭했던 상품군 이름이 포함되도록 직관성 강화
+        XLSX.utils.book_append_sheet(wb, ws, "모집인_퍼포먼스_순위");
         XLSX.writeFile(wb, `${globalGrmId}_모집인순위_${activeNames.replace(/ \+ /g, '')}_${Date.now()}.xlsx`);
     }
 
-    // 8-2. 전체 데이터 원본 엑셀 추출 (기존 기능)
+    // 8-2. 전체 데이터 원본 엑셀 추출
     function downloadResultExcel() {
         if(globalResultData.length <= 1) return alert("다운로드할 데이터가 없습니다.");
         const wb = XLSX.utils.book_new();
@@ -869,9 +874,15 @@
 
         const wsDash = XLSX.utils.aoa_to_sheet(dashData);
         wsDash['!cols'] = [{wch: 35}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 20}];
+        
+        // v0.6.3 추가: 요약 시트 숫자 포맷팅 호출
+        applyExcelNumberFormat(wsDash);
         XLSX.utils.book_append_sheet(wb, wsDash, "통계_대시보드(보고용)");
 
         const wsData = XLSX.utils.aoa_to_sheet(globalResultData);
+        
+        // v0.6.3 추가: 원시 데이터 시트 숫자 포맷팅 호출 (MCP, 금액 등 필드 자동 포맷팅)
+        applyExcelNumberFormat(wsData);
         XLSX.utils.book_append_sheet(wb, wsData, `${globalGrmId}_계약_RawData`);
         
         XLSX.writeFile(wb, `${globalGrmId}_업적분석_최종보고서.xlsx`);
