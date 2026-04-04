@@ -826,4 +826,14 @@
         });
 
         const wsDash = XLSX.utils.aoa_to_sheet(dashData);
-        wsDash['!cols'] =
+        wsDash['!cols'] = [{wch: 35}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 20}];
+        XLSX.utils.book_append_sheet(wb, wsDash, "통계_대시보드(보고용)");
+
+        const wsData = XLSX.utils.aoa_to_sheet(globalResultData);
+        XLSX.utils.book_append_sheet(wb, wsData, `${globalGrmId}_계약_RawData`);
+        
+        XLSX.writeFile(wb, `${globalGrmId}_업적분석_최종보고서.xlsx`);
+    }
+</script>
+</body>
+</html>
