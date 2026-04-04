@@ -49,7 +49,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.0</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.1</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
@@ -96,7 +96,14 @@
         <div class="date-filter-bar mb-4 d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center">
                 <i class="bi bi-calendar-range fs-4 text-primary me-3"></i>
-                <h5 class="fw-bold mb-0 me-4">조회 기간 설정</h5>
+                <h5 class="fw-bold mb-0 me-3">조회 기간 설정</h5>
+                
+                <div class="btn-group me-4 shadow-sm">
+                    <button class="btn btn-outline-secondary btn-sm fw-bold" onclick="setQuickDate('today')">당일</button>
+                    <button class="btn btn-outline-secondary btn-sm fw-bold" onclick="setQuickDate('lastMonth')">전월</button>
+                    <button class="btn btn-outline-secondary btn-sm fw-bold" onclick="setQuickDate('3months')">3개월</button>
+                </div>
+
                 <div class="d-flex align-items-center">
                     <input type="date" id="startDate" class="form-control fw-bold shadow-sm" style="width: 160px;">
                     <span class="mx-3 fw-bold">~</span>
@@ -245,7 +252,9 @@
 
         </div>
     </div>
-</div> <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
     // --- 1. 전역 상태 및 In-Memory 캐싱 ---
@@ -273,7 +282,21 @@
 
     const formatNum = (num) => Math.floor(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
-    // --- 2. 초기화 (기준 데이터 로드) ---
+    // YYYYMMDD -> YYYY-MM-DD 변환 유틸리티
+    function formatStrDate(str) {
+        if(!str || str.length !== 8) return "";
+        return `${str.substring(0,4)}-${str.substring(4,6)}-${str.substring(6,8)}`;
+    }
+    
+    // Date 객체 -> YYYY-MM-DD 변환 유틸리티
+    function formatDateObj(dateObj) {
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    // --- 2. 초기화 ---
     window.addEventListener('DOMContentLoaded', async () => {
         const btnStart = document.getElementById('btnStart');
         const grmSelect = document.getElementById('grmIdSelect');
@@ -360,7 +383,7 @@
         }
     }
 
-    // --- 4. 분석 엔진 1단계 (v0.6.0 Web Worker 통합) ---
+    // --- 4. 분석 엔진 1단계 (Web Worker 통합) ---
     function getAgeGroup(yyyymmdd) {
         if(!yyyymmdd || yyyymmdd.length < 6) return "미상";
         let yy = parseInt(yyyymmdd.substring(0, 2));
@@ -396,27 +419,31 @@
         document.getElementById('loadingText').innerText = "백그라운드 엔진으로 수만 건 데이터를 파싱 중입니다...";
         document.getElementById('loadingSpinner').style.display = 'flex';
 
-        // Worker로 전송할 데이터 직렬화
         const branchArray = Array.from(branchSet);
         const productObj = Object.fromEntries(globalProductMap);
 
         const reader = new FileReader();
         reader.onload = (e) => {
             const fileBuffer = e.target.result;
-            
-            // Web Worker 호출
             const worker = new Worker('worker.js');
             
             worker.onmessage = (msg) => {
-                const { status, parsedData, resultData, message } = msg.data;
+                const { status, parsedData, resultData, message, minDate, maxDate } = msg.data;
                 
                 if(status === 'success') {
                     globalParsedData = parsedData;
                     globalResultData = resultData;
                     
-                    let todayStr = new Date().toISOString().split('T')[0];
-                    document.getElementById('startDate').value = todayStr;
-                    document.getElementById('endDate').value = todayStr;
+                    // v0.6.1 수정: 엑셀 내부의 최소/최대 날짜로 기본값 세팅
+                    if(minDate && maxDate) {
+                        document.getElementById('startDate').value = formatStrDate(minDate);
+                        document.getElementById('endDate').value = formatStrDate(maxDate);
+                    } else {
+                        // 날짜를 아예 못 찾았을 경우 오늘 날짜로 폴백
+                        let todayStr = formatDateObj(new Date());
+                        document.getElementById('startDate').value = todayStr;
+                        document.getElementById('endDate').value = todayStr;
+                    }
 
                     var bsCollapse = new bootstrap.Collapse(document.getElementById('controlPanel'), { toggle: false });
                     bsCollapse.hide();
@@ -425,14 +452,11 @@
                     document.getElementById('dashboardArea').style.display = 'block';
                     document.getElementById('exportBtnGroup').style.display = 'inline-flex';
 
-                    runAggregation(); // 동적 재계산 가동
-
+                    runAggregation(); 
                 } else {
                     document.getElementById('loadingSpinner').style.display = 'none';
                     alert('엔진 오류: ' + message);
                 }
-                
-                // 메모리 누수 방지를 위해 워커 즉시 해제
                 worker.terminate();
             };
 
@@ -443,11 +467,31 @@
                 worker.terminate();
             };
 
-            // 데이터를 Worker로 전송 (Zero-copy transfer 적용으로 메모리 최적화)
             worker.postMessage({ fileBuffer, branchArray, productObj }, [fileBuffer]);
         };
         
         reader.readAsArrayBuffer(targetFile);
+    }
+
+    // v0.6.1 추가: 빠른 날짜 선택 버튼 연동 로직
+    function setQuickDate(type) {
+        const today = new Date();
+        let sDate, eDate;
+
+        if(type === 'today') {
+            sDate = today;
+            eDate = today;
+        } else if(type === 'lastMonth') {
+            sDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            eDate = new Date(today.getFullYear(), today.getMonth(), 0); // 전월의 마지막 날
+        } else if(type === '3months') {
+            sDate = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
+            eDate = today;
+        }
+
+        document.getElementById('startDate').value = formatDateObj(sDate);
+        document.getElementById('endDate').value = formatDateObj(eDate);
+        // 버튼 클릭 후 사용자가 [기간 적용 및 재계산]을 직접 누르도록 여기서 runAggregation() 호출 생략
     }
 
     // --- 5. 분석 엔진 2단계 (동적 결합) ---
@@ -546,7 +590,21 @@
             if(agg.pC > 0 || agg.aC > 0) validAgents.push({ display: a.display, agg: agg });
         }
 
-        let sorted = validAgents.sort((a,b) => isMcp ? b.agg.pM - a.agg.pM : b.agg.pC - a.agg.pC);
+        // v0.6.1 수정: 다중 정렬(Tie-breaker) 알고리즘 적용
+        let sorted = validAgents.sort((a, b) => {
+            if (isMcp) {
+                // 기간 실적이 다르면 기간 실적 우선 정렬
+                if (b.agg.pM !== a.agg.pM) return b.agg.pM - a.agg.pM;
+                // 기간 실적이 같다면(예: 둘 다 0) 누적 실적으로 정렬
+                return b.agg.aM - a.agg.aM;
+            } else {
+                // 기간 건수가 다르면 기간 건수 우선 정렬
+                if (b.agg.pC !== a.agg.pC) return b.agg.pC - a.agg.pC;
+                // 기간 건수가 같다면 누적 건수로 정렬
+                return b.agg.aC - a.agg.aC;
+            }
+        });
+        
         let top10 = sorted.slice(0, 10);
 
         let activeNames = Array.from(activeAgentGroups).join('+');
@@ -768,14 +826,4 @@
         });
 
         const wsDash = XLSX.utils.aoa_to_sheet(dashData);
-        wsDash['!cols'] = [{wch: 35}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 20}];
-        XLSX.utils.book_append_sheet(wb, wsDash, "통계_대시보드(보고용)");
-
-        const wsData = XLSX.utils.aoa_to_sheet(globalResultData);
-        XLSX.utils.book_append_sheet(wb, wsData, `${globalGrmId}_계약_RawData`);
-        
-        XLSX.writeFile(wb, `${globalGrmId}_업적분석_최종보고서.xlsx`);
-    }
-</script>
-</body>
-</html>
+        wsDash['!cols'] =
