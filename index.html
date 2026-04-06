@@ -49,7 +49,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.4</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.5</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
@@ -150,6 +150,23 @@
                                 <tr><th>상품군</th><th class="text-warning">조회기간 실적 (MCP)</th><th class="text-warning">조회기간 건수</th><th>누적 실적 (MCP)</th><th>누적 건수</th></tr>
                             </thead>
                             <tbody id="productTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="card shadow border-0 mt-4">
+                    <div class="card-header bg-white fs-5 fw-bold py-3 d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-building"></i> 대리점 및 지점별 상세 실적</span>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="toggleAllBranches()"><i class="bi bi-arrows-expand"></i> 전체 펼치기 / 접기</button>
+                    </div>
+                    <div class="card-body p-0 table-scroll-area" style="max-height: 600px; overflow-y: auto;">
+                        <table class="table table-hover mb-0 text-center align-middle fs-6" id="agencyTable">
+                            <thead class="table-light sticky-top shadow-sm">
+                                <tr><th>대리점 / 지점명</th><th class="text-success">조회기간 실적(MCP)</th><th class="text-success">조회기간 건수</th><th>누적 실적(MCP)</th><th>누적 건수</th></tr>
+                            </thead>
+                            <tbody id="agencyTableBody">
+                                <tr><td colspan="5" class="text-muted py-3">데이터 분석을 시작해주세요.</td></tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -279,6 +296,10 @@
     let agentMap = new Map();
     let demoStats = {}; 
     let dxMap = new Map();
+    
+    // 260407 추가 (with Gemini) 2-Depth 대리점 맵 및 UI 상태 변수
+    let agencyMap = new Map(); 
+    let isAllExpanded = false;
     
     let activeAgentGroups = new Set(['종합']);
     let activeDemoGroups = new Set(['종합']);
@@ -517,6 +538,9 @@
         groupTypes.forEach(g => groupStats[g] = { aM:0, aC:0, pM:0, pC:0 });
         agentMap.clear(); dxMap.clear();
         groupTypes.forEach(g => demoStats[g] = { age: {}, gen: {} });
+        
+        // 260407 수정 (with Gemini) 대리점 맵 초기화
+        agencyMap.clear(); 
 
         for(let item of globalParsedData) {
             let isPeriod = (item.rawDate >= startVal && item.rawDate <= endVal);
@@ -545,6 +569,21 @@
                     if(isPeriod) { aData.stats[item.gName].pM += item.mcp; aData.stats[item.gName].pC++; }
                 }
             }
+            
+            // 260407 추가 (with Gemini) 2-Depth 대리점/지점 실적 병합 알고리즘
+            if(!agencyMap.has(item.agencyName)) {
+                agencyMap.set(item.agencyName, { aM:0, aC:0, pM:0, pC:0, branches: new Map() });
+            }
+            let agData = agencyMap.get(item.agencyName);
+            agData.aM += item.mcp; agData.aC++;
+            if(isPeriod) { agData.pM += item.mcp; agData.pC++; }
+
+            if(!agData.branches.has(item.branchCode)) {
+                agData.branches.set(item.branchCode, { branchName: item.branchName, aM:0, aC:0, pM:0, pC:0 });
+            }
+            let brData = agData.branches.get(item.branchCode);
+            brData.aM += item.mcp; brData.aC++;
+            if(isPeriod) { brData.pM += item.mcp; brData.pC++; }
 
             let ageGroup = getAgeGroup(item.yy);
             if(item.gen) {
@@ -573,6 +612,68 @@
             let st = groupStats[key];
             tbody.innerHTML += `<tr><td class="fw-bold">${key}</td><td class="text-danger fw-bold">${formatNum(st.pM)}</td><td class="text-danger">${formatNum(st.pC)}</td><td class="fw-bold">${formatNum(st.aM)}</td><td>${formatNum(st.aC)}</td></tr>`;
         });
+        
+        // 260407 추가 (with Gemini) String Builder 패턴 대리점 렌더링
+        let agTbody = document.getElementById('agencyTableBody'); 
+        if (agTbody) {
+            let htmlStr = [];
+            let sortedAgencies = Array.from(agencyMap.entries()).sort((a,b) => b[1].pM - a[1].pM);
+            
+            sortedAgencies.forEach(([agName, agData], agIdx) => {
+                htmlStr.push(`
+                    <tr class="table-secondary" style="cursor: pointer; border-bottom: 2px solid #dee2e6;" onclick="toggleBranchRow(${agIdx})">
+                        <td class="fw-bold text-start ps-3"><i class="bi bi-chevron-down me-2" id="icon-ag-${agIdx}"></i>${agName}</td>
+                        <td class="text-success fw-bold">${formatNum(agData.pM)}</td>
+                        <td class="text-success fw-bold">${formatNum(agData.pC)}</td>
+                        <td class="text-primary fw-bold">${formatNum(agData.aM)}</td>
+                        <td class="fw-bold">${formatNum(agData.aC)}</td>
+                    </tr>
+                `);
+                
+                let sortedBranches = Array.from(agData.branches.entries()).sort((a,b) => b[1].pM - a[1].pM);
+                sortedBranches.forEach(([brCode, brData]) => {
+                    htmlStr.push(`
+                        <tr class="branch-row-${agIdx} d-none bg-white">
+                            <td class="text-start ps-5 text-muted"><i class="bi bi-arrow-return-right me-1"></i> ${brData.branchName} <span class="badge bg-light border text-secondary ms-1">${brCode}</span></td>
+                            <td class="text-success">${formatNum(brData.pM)}</td>
+                            <td>${formatNum(brData.pC)}</td>
+                            <td class="text-primary">${formatNum(brData.aM)}</td>
+                            <td>${formatNum(brData.aC)}</td>
+                        </tr>
+                    `);
+                });
+            });
+            agTbody.innerHTML = htmlStr.join('');
+            isAllExpanded = false; 
+        }
+    }
+
+    // 260407 추가 (with Gemini) 아코디언 토글 제어 함수
+    function toggleBranchRow(agIdx, forceState = null) {
+        const rows = document.querySelectorAll(`.branch-row-${agIdx}`);
+        const icon = document.getElementById(`icon-ag-${agIdx}`);
+        if(rows.length === 0) return;
+
+        let isHidden = rows[0].classList.contains('d-none');
+        let targetState = forceState !== null ? forceState : isHidden; 
+        
+        rows.forEach(row => {
+            if(targetState) row.classList.remove('d-none');
+            else row.classList.add('d-none');
+        });
+        if(icon) icon.className = targetState ? "bi bi-chevron-up me-2 text-primary" : "bi bi-chevron-down me-2";
+    }
+
+    // 260407 추가 (with Gemini) 아코디언 전체 토글 제어 함수
+    function toggleAllBranches(forceState = null) {
+        const iconEls = document.querySelectorAll('[id^="icon-ag-"]');
+        let targetState = forceState !== null ? forceState : !isAllExpanded;
+        
+        iconEls.forEach(icon => {
+            let idx = icon.id.replace('icon-ag-', '');
+            toggleBranchRow(idx, targetState);
+        });
+        isAllExpanded = targetState;
     }
 
     function toggleAgentGroup(grp) {
@@ -711,7 +812,10 @@
         exportBtnGroup.style.display = 'none';
         
         const originalStyles = removeScrollLimits();
-        await new Promise(r => setTimeout(r, 100)); 
+        
+        // 260407 추가 (with Gemini): 캡처 전 대리점 전체 펼침 강제 및 렌더링 대기
+        toggleAllBranches(true);
+        await new Promise(r => setTimeout(r, 300)); 
 
         try {
             const canvas = await html2canvas(mainContainer, { scale: 2, useCORS: true, backgroundColor: '#f4f6f9' });
@@ -724,6 +828,7 @@
             console.error(e);
         } finally {
             restoreScrollLimits(originalStyles);
+            toggleAllBranches(false); // 260407 추가 (with Gemini): 캡처 후 원상 복구
             controlPanel.style.display = '';
             exportBtnGroup.style.display = 'inline-flex';
             document.getElementById('loadingSpinner').style.display = 'none';
@@ -759,6 +864,9 @@
             
             const activeTabBtn = document.querySelector('#myTab .nav-link.active');
             const originalStyles = removeScrollLimits();
+            
+            // 260407 추가 (with Gemini): PDF 캡처 전 대리점 전체 펼침 강제
+            toggleAllBranches(true);
 
             for (let i = 0; i < tabIds.length; i++) {
                 const tabEl = document.querySelector(tabButtons[i]);
@@ -799,6 +907,7 @@
             console.error(e);
         } finally {
             restoreScrollLimits(originalStyles);
+            toggleAllBranches(false); // 260407 추가 (with Gemini): 캡처 후 원상 복구
             controlPanel.style.display = '';
             exportBtnGroup.style.display = 'inline-flex';
             document.getElementById('loadingSpinner').style.display = 'none';
@@ -806,8 +915,6 @@
     }
 
     // --- 8. 데이터 엑셀 다운로드 ---
-    
-    // 8-1. v0.6.4 수정: 다중 시트 분할 생성 로직 포함 모집인 순위 추출
     function downloadAgentExcel() {
         const exportType = document.getElementById('agentExcelExportType').value;
         let sDate = document.getElementById('startDate').value;
@@ -816,7 +923,6 @@
         let sortName = isMcp ? '조회기간 MCP 우선' : '조회기간 건수 우선';
 
         if (exportType === 'current') {
-            // [현재 데이터] 모드: 화면에 띄워진 기존 데이터만 단독 추출
             if(currentSortedAgents.length === 0) return alert("다운로드할 데이터가 없습니다.");
             
             const wb = XLSX.utils.book_new();
@@ -842,11 +948,9 @@
             XLSX.writeFile(wb, `${globalGrmId}_모집인순위_${activeNames.replace(/ \+ /g, '')}_${Date.now()}.xlsx`);
 
         } else {
-            // [카테고리별 전체 데이터] 모드: 다중 시트 생성 및 빈 시트 생략 로직
             document.getElementById('loadingText').innerText = "카테고리별 다중 시트 엑셀을 생성 중입니다...";
             document.getElementById('loadingSpinner').style.display = 'flex';
 
-            // 비동기 양보(Yield)를 통해 스피너가 그려질 시간을 줌
             setTimeout(() => {
                 try {
                     const wb = XLSX.utils.book_new();
@@ -854,7 +958,6 @@
 
                     categories.forEach(cat => {
                         let validAgents = [];
-                        // 해당 카테고리에 실적이 1건이라도 있는 모집인 필터링
                         for (let a of agentMap.values()) {
                             let stats = a.stats[cat];
                             if (stats && (stats.pC > 0 || stats.aC > 0)) {
@@ -862,7 +965,6 @@
                             }
                         }
 
-                        // 실적이 없으면 해당 카테고리 시트 생성 생략 (연금 등 빈 시트 방지)
                         if (validAgents.length === 0) return; 
 
                         validAgents.sort((a, b) => {
@@ -894,7 +996,6 @@
                         XLSX.utils.book_append_sheet(wb, ws, cat); 
                     });
 
-                    // 생성된 시트가 1개도 없을 경우의 안전장치
                     if (wb.SheetNames.length === 0) {
                         alert("선택하신 기간에 출력할 실적 데이터가 없습니다.");
                     } else {
@@ -911,7 +1012,6 @@
         }
     }
 
-    // 8-2. 전체 데이터 원본 엑셀 추출
     function downloadResultExcel() {
         if(globalResultData.length <= 1) return alert("다운로드할 데이터가 없습니다.");
         const wb = XLSX.utils.book_new();

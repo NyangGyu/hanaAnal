@@ -1,4 +1,4 @@
-// [worker.js] v0.6.1 백그라운드 멀티스레딩 연산 엔진
+// [worker.js] v0.6.5 백그라운드 멀티스레딩 연산 엔진
 
 importScripts('https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js');
 
@@ -44,7 +44,12 @@ self.onmessage = function(e) {
                     agtDisplay: `[${String(row[1] || "").trim()}] ${String(row[2] || "").trim()} - ${String(row[4] || "").trim()}`,
                     yy: String(row[16] || "").replace(/[^\d]/g, ""),
                     gen: String(row[17] || "").trim(),
-                    dxType: String(row[34] || "").trim()
+                    dxType: String(row[34] || "").trim(),
+                    
+                    // 260407 추가 (with Gemini) 대리점, 지점명, 지점코드 추출
+                    agencyName: String(row[2] || "").trim() || "기타대리점",
+                    branchCode: String(row[3] || "").trim(),
+                    branchName: String(row[4] || "").trim() || "기타지점"
                 });
             }
         }
