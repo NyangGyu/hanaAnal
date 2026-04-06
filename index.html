@@ -49,7 +49,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.5</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.6</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
@@ -539,7 +539,7 @@
         agentMap.clear(); dxMap.clear();
         groupTypes.forEach(g => demoStats[g] = { age: {}, gen: {} });
         
-        // 260407 수정 (with Gemini) 대리점 맵 초기화
+        // 260407 추가 (with Gemini) 대리점 맵 초기화
         agencyMap.clear(); 
 
         for(let item of globalParsedData) {
