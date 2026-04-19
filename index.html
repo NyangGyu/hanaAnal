@@ -49,7 +49,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.6</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.7</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
@@ -156,13 +156,15 @@
                 
                 <div class="card shadow border-0 mt-4">
                     <div class="card-header bg-white fs-5 fw-bold py-3 d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-building"></i> 대리점 및 지점별 상세 실적</span>
-                        <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="toggleAllBranches()"><i class="bi bi-arrows-expand"></i> 전체 펼치기 / 접기</button>
+                        <span><i class="bi bi-building"></i> 대리점 및 지점별 상세 실적 (3-Depth)</span>
+                        <div>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="toggleAllBranches()"><i class="bi bi-arrows-expand"></i> 대리점 하위 지점 펼치기</button>
+                        </div>
                     </div>
                     <div class="card-body p-0 table-scroll-area" style="max-height: 600px; overflow-y: auto;">
                         <table class="table table-hover mb-0 text-center align-middle fs-6" id="agencyTable">
                             <thead class="table-light sticky-top shadow-sm">
-                                <tr><th>대리점 / 지점명</th><th class="text-success">조회기간 실적(MCP)</th><th class="text-success">조회기간 건수</th><th>누적 실적(MCP)</th><th>누적 건수</th></tr>
+                                <tr><th>소속 / 모집인명</th><th class="text-success">조회기간 실적(MCP)</th><th class="text-success">조회기간 건수</th><th>누적 실적(MCP)</th><th>누적 건수</th></tr>
                             </thead>
                             <tbody id="agencyTableBody">
                                 <tr><td colspan="5" class="text-muted py-3">데이터 분석을 시작해주세요.</td></tr>
@@ -297,8 +299,7 @@
     let demoStats = {}; 
     let dxMap = new Map();
     
-    // 260407 추가 (with Gemini) 2-Depth 대리점 맵 및 UI 상태 변수
-    let agencyMap = new Map(); 
+    let agencyMap = new Map(); // 3-Depth 맵
     let isAllExpanded = false;
     
     let activeAgentGroups = new Set(['종합']);
@@ -325,7 +326,6 @@
         return `${y}-${m}-${d}`;
     }
 
-    // 엑셀 숫자 포맷팅(천 단위 콤마) 유틸리티
     function applyExcelNumberFormat(ws) {
         for (let key in ws) {
             if (key[0] === '!') continue; 
@@ -539,7 +539,6 @@
         agentMap.clear(); dxMap.clear();
         groupTypes.forEach(g => demoStats[g] = { age: {}, gen: {} });
         
-        // 260407 추가 (with Gemini) 대리점 맵 초기화
         agencyMap.clear(); 
 
         for(let item of globalParsedData) {
@@ -570,7 +569,8 @@
                 }
             }
             
-            // 260407 추가 (with Gemini) 2-Depth 대리점/지점 실적 병합 알고리즘
+            // 260408 수정 (with Gemini) 3-Depth 대리점/지점/모집인 실적 병합 알고리즘
+            // 1-Depth: 대리점
             if(!agencyMap.has(item.agencyName)) {
                 agencyMap.set(item.agencyName, { aM:0, aC:0, pM:0, pC:0, branches: new Map() });
             }
@@ -578,12 +578,25 @@
             agData.aM += item.mcp; agData.aC++;
             if(isPeriod) { agData.pM += item.mcp; agData.pC++; }
 
+            // 2-Depth: 지점
             if(!agData.branches.has(item.branchCode)) {
-                agData.branches.set(item.branchCode, { branchName: item.branchName, aM:0, aC:0, pM:0, pC:0 });
+                agData.branches.set(item.branchCode, { branchName: item.branchName, aM:0, aC:0, pM:0, pC:0, agents: new Map() });
             }
             let brData = agData.branches.get(item.branchCode);
             brData.aM += item.mcp; brData.aC++;
             if(isPeriod) { brData.pM += item.mcp; brData.pC++; }
+            
+            // 3-Depth: 모집인
+            if(item.agtId) {
+                if(!brData.agents.has(item.agtId)) {
+                    // 화면 표출을 위해 순수 모집인 이름만 추출 (예: "[대리점] 지점 - 홍길동" -> "홍길동")
+                    let pureAgtName = item.agtDisplay.split('-')[1]?.trim() || item.agtId;
+                    brData.agents.set(item.agtId, { display: pureAgtName, aM:0, aC:0, pM:0, pC:0 });
+                }
+                let agtNode = brData.agents.get(item.agtId);
+                agtNode.aM += item.mcp; agtNode.aC++;
+                if(isPeriod) { agtNode.pM += item.mcp; agtNode.pC++; }
+            }
 
             let ageGroup = getAgeGroup(item.yy);
             if(item.gen) {
@@ -613,13 +626,14 @@
             tbody.innerHTML += `<tr><td class="fw-bold">${key}</td><td class="text-danger fw-bold">${formatNum(st.pM)}</td><td class="text-danger">${formatNum(st.pC)}</td><td class="fw-bold">${formatNum(st.aM)}</td><td>${formatNum(st.aC)}</td></tr>`;
         });
         
-        // 260407 추가 (with Gemini) String Builder 패턴 대리점 렌더링
+        // 260408 수정 (with Gemini) 3-Depth String Builder 렌더링
         let agTbody = document.getElementById('agencyTableBody'); 
         if (agTbody) {
             let htmlStr = [];
             let sortedAgencies = Array.from(agencyMap.entries()).sort((a,b) => b[1].pM - a[1].pM);
             
             sortedAgencies.forEach(([agName, agData], agIdx) => {
+                // 1-Depth: 대리점
                 htmlStr.push(`
                     <tr class="table-secondary" style="cursor: pointer; border-bottom: 2px solid #dee2e6;" onclick="toggleBranchRow(${agIdx})">
                         <td class="fw-bold text-start ps-3"><i class="bi bi-chevron-down me-2" id="icon-ag-${agIdx}"></i>${agName}</td>
@@ -632,15 +646,30 @@
                 
                 let sortedBranches = Array.from(agData.branches.entries()).sort((a,b) => b[1].pM - a[1].pM);
                 sortedBranches.forEach(([brCode, brData]) => {
+                    // 2-Depth: 지점 (클릭 시 하위 모집인 토글 이벤트 추가)
                     htmlStr.push(`
-                        <tr class="branch-row-${agIdx} d-none bg-white">
-                            <td class="text-start ps-5 text-muted"><i class="bi bi-arrow-return-right me-1"></i> ${brData.branchName} <span class="badge bg-light border text-secondary ms-1">${brCode}</span></td>
-                            <td class="text-success">${formatNum(brData.pM)}</td>
-                            <td>${formatNum(brData.pC)}</td>
-                            <td class="text-primary">${formatNum(brData.aM)}</td>
-                            <td>${formatNum(brData.aC)}</td>
+                        <tr class="branch-row-${agIdx} d-none bg-white" style="cursor: pointer; border-bottom: 1px solid #f0f0f0;" onclick="toggleAgentRow(${agIdx}, '${brCode}')">
+                            <td class="text-start ps-4 text-muted fw-bold"><i class="bi bi-chevron-down me-1" id="icon-br-${agIdx}-${brCode}"></i> ${brData.branchName} <span class="badge bg-light border text-secondary ms-1">${brCode}</span></td>
+                            <td class="text-success fw-bold">${formatNum(brData.pM)}</td>
+                            <td class="fw-bold">${formatNum(brData.pC)}</td>
+                            <td class="text-primary fw-bold">${formatNum(brData.aM)}</td>
+                            <td class="fw-bold">${formatNum(brData.aC)}</td>
                         </tr>
                     `);
+                    
+                    // 3-Depth: 모집인 (최초 숨김)
+                    let sortedAgents = Array.from(brData.agents.values()).sort((a,b) => b.pM - a.pM);
+                    sortedAgents.forEach(agt => {
+                        htmlStr.push(`
+                            <tr class="agent-row-${agIdx}-${brCode} d-none" style="background-color: #fcfcfc;">
+                                <td class="text-start ps-5 text-secondary" style="font-size: 0.95em;"><i class="bi bi-person me-2"></i>${agt.display}</td>
+                                <td class="text-success" style="font-size: 0.95em;">${formatNum(agt.pM)}</td>
+                                <td style="font-size: 0.95em;">${formatNum(agt.pC)}</td>
+                                <td class="text-primary" style="font-size: 0.95em;">${formatNum(agt.aM)}</td>
+                                <td style="font-size: 0.95em;">${formatNum(agt.aC)}</td>
+                            </tr>
+                        `);
+                    });
                 });
             });
             agTbody.innerHTML = htmlStr.join('');
@@ -648,7 +677,7 @@
         }
     }
 
-    // 260407 추가 (with Gemini) 아코디언 토글 제어 함수
+    // 1-Depth 대리점 토글 
     function toggleBranchRow(agIdx, forceState = null) {
         const rows = document.querySelectorAll(`.branch-row-${agIdx}`);
         const icon = document.getElementById(`icon-ag-${agIdx}`);
@@ -662,9 +691,34 @@
             else row.classList.add('d-none');
         });
         if(icon) icon.className = targetState ? "bi bi-chevron-up me-2 text-primary" : "bi bi-chevron-down me-2";
+        
+        // 260408 추가: 대리점을 닫을 때, 그 하위에 열려있던 3-Depth 모집인들도 함께 강제로 닫음 (깔끔한 UI 유지)
+        if(!targetState) {
+            const agentRows = document.querySelectorAll(`[class*="agent-row-${agIdx}-"]`);
+            agentRows.forEach(row => row.classList.add('d-none'));
+            const brIcons = document.querySelectorAll(`[id^="icon-br-${agIdx}-"]`);
+            brIcons.forEach(i => i.className = "bi bi-chevron-down me-1");
+        }
+    }
+    
+    // 2-Depth 지점 토글 (모집인 표출)
+    function toggleAgentRow(agIdx, brCode, forceState = null) {
+        // 이벤트 버블링 방지는 HTML inline onclick 특성상 필요 없게 구조화됨.
+        const rows = document.querySelectorAll(`.agent-row-${agIdx}-${brCode}`);
+        const icon = document.getElementById(`icon-br-${agIdx}-${brCode}`);
+        if(rows.length === 0) return;
+
+        let isHidden = rows[0].classList.contains('d-none');
+        let targetState = forceState !== null ? forceState : isHidden; 
+        
+        rows.forEach(row => {
+            if(targetState) row.classList.remove('d-none');
+            else row.classList.add('d-none');
+        });
+        if(icon) icon.className = targetState ? "bi bi-chevron-up me-1 text-primary" : "bi bi-chevron-down me-1";
     }
 
-    // 260407 추가 (with Gemini) 아코디언 전체 토글 제어 함수
+    // 전체 토글 (Option A: 2-Depth 지점까지만 펼침/접기 수행. PDF 캡처 OOM 방어 목적)
     function toggleAllBranches(forceState = null) {
         const iconEls = document.querySelectorAll('[id^="icon-ag-"]');
         let targetState = forceState !== null ? forceState : !isAllExpanded;
@@ -672,6 +726,7 @@
         iconEls.forEach(icon => {
             let idx = icon.id.replace('icon-ag-', '');
             toggleBranchRow(idx, targetState);
+            // 의도적으로 toggleAgentRow는 호출하지 않음 (Option A 정책)
         });
         isAllExpanded = targetState;
     }
@@ -813,7 +868,7 @@
         
         const originalStyles = removeScrollLimits();
         
-        // 260407 추가 (with Gemini): 캡처 전 대리점 전체 펼침 강제 및 렌더링 대기
+        // Option A: 2-Depth 강제 펼침 후 대기
         toggleAllBranches(true);
         await new Promise(r => setTimeout(r, 300)); 
 
@@ -828,7 +883,7 @@
             console.error(e);
         } finally {
             restoreScrollLimits(originalStyles);
-            toggleAllBranches(false); // 260407 추가 (with Gemini): 캡처 후 원상 복구
+            toggleAllBranches(false); 
             controlPanel.style.display = '';
             exportBtnGroup.style.display = 'inline-flex';
             document.getElementById('loadingSpinner').style.display = 'none';
@@ -865,7 +920,7 @@
             const activeTabBtn = document.querySelector('#myTab .nav-link.active');
             const originalStyles = removeScrollLimits();
             
-            // 260407 추가 (with Gemini): PDF 캡처 전 대리점 전체 펼침 강제
+            // Option A: 2-Depth 강제 펼침 후 대기
             toggleAllBranches(true);
 
             for (let i = 0; i < tabIds.length; i++) {
@@ -907,7 +962,7 @@
             console.error(e);
         } finally {
             restoreScrollLimits(originalStyles);
-            toggleAllBranches(false); // 260407 추가 (with Gemini): 캡처 후 원상 복구
+            toggleAllBranches(false); 
             controlPanel.style.display = '';
             exportBtnGroup.style.display = 'inline-flex';
             document.getElementById('loadingSpinner').style.display = 'none';
