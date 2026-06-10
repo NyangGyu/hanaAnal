@@ -49,7 +49,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.6.7</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.7.0</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
@@ -61,7 +61,10 @@
 
     <div class="collapse show" id="controlPanel">
         <div class="card shadow-sm mb-4 border-primary">
-            <div class="card-header text-primary bg-white fs-5"><i class="bi bi-gear-fill"></i> 1. 데이터 업로드 및 설정</div>
+            <div class="card-header text-primary bg-white fs-5 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-gear-fill"></i> 1. 데이터 업로드 및 설정</span>
+                <button id="btnSuperAdmin" class="btn btn-sm btn-outline-dark fw-bold" onclick="toggleSuperAdmin()"><i class="bi bi-shield-lock"></i> 슈퍼관리자</button>
+            </div>
             <div class="card-body">
                 <div class="row g-4 align-items-start">
                     <div class="col-md-4">
@@ -117,6 +120,7 @@
             <li class="nav-item" role="presentation"><button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#summary" type="button"><i class="bi bi-clipboard-data"></i> 종합 요약</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#agents" type="button"><i class="bi bi-person-badge"></i> 우수 모집인 분석</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#demo" type="button"><i class="bi bi-pie-chart"></i> 고객 데모그래픽</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-danger" data-bs-toggle="tab" data-bs-target="#health" type="button"><i class="bi bi-heart-pulse"></i> 건강보험 추가 분석</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#efficiency" type="button"><i class="bi bi-lightning-charge"></i> 영업 효율 및 객단가</button></li>
         </ul>
 
@@ -260,6 +264,75 @@
                 </div>
             </div>
 
+            <div class="tab-pane fade" id="health" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="fw-bold text-danger mb-0"><i class="bi bi-heart-pulse"></i> 건강보험 심층 분석 <span class="badge bg-light text-secondary border ms-2" style="font-size:0.7rem;">※ 조회기간 기준 / 상태필터 적용</span></h4>
+                    <button class="btn btn-outline-success fw-bold shadow-sm" onclick="downloadHealthExcel()"><i class="bi bi-file-earmark-arrow-down"></i> 건강보험 분석 엑셀</button>
+                </div>
+
+                <div id="healthEmpty" class="alert alert-secondary text-center fw-bold py-5" style="display:none;">
+                    <i class="bi bi-info-circle fs-3 d-block mb-2"></i>조회기간 내 건강보험(하나로누리는 / 하나로라이트3.10.5) 계약이 없습니다.
+                </div>
+
+                <div id="healthContent">
+                    <!-- KPI 카드 -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3 col-6"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">건강보험 총 건수</div><h3 class="fw-bold text-danger mb-0" id="h_total_cnt">0</h3></div></div></div>
+                        <div class="col-md-3 col-6"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">총 실적 (MCP)</div><h3 class="fw-bold text-primary mb-0" id="h_total_mcp">0</h3></div></div></div>
+                        <div class="col-md-2 col-6"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">평균 객단가</div><h3 class="fw-bold text-success mb-0" id="h_avg_mcp">0</h3></div></div></div>
+                        <div class="col-md-2 col-6"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">간편심사 비율</div><h3 class="fw-bold text-warning mb-0" id="h_simple_ratio">0%</h3></div></div></div>
+                        <div class="col-md-2 col-12"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">평균 가입연령</div><h3 class="fw-bold text-dark mb-0" id="h_avg_age">0세</h3></div></div></div>
+                    </div>
+
+                    <!-- 형태별 구성 차트 -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-6"><div class="card shadow border-0 h-100"><div class="card-header bg-white fw-bold text-primary">① 상품구조(환급형태) 비중</div><div class="card-body"><div class="chart-container"><canvas id="hStructChart"></canvas></div></div></div></div>
+                        <div class="col-md-6"><div class="card shadow border-0 h-100"><div class="card-header bg-white fw-bold text-primary">② 심사형태 분포 (일반 vs 간편 등급)</div><div class="card-body"><div class="chart-container"><canvas id="hExamChart"></canvas></div></div></div></div>
+                        <div class="col-md-6"><div class="card shadow border-0 h-100"><div class="card-header bg-white fw-bold text-primary">③ 보장형태 분포 (만기형 vs 갱신형)</div><div class="card-body"><div class="chart-container"><canvas id="hCoverageChart"></canvas></div></div></div></div>
+                        <div class="col-md-6"><div class="card shadow border-0 h-100"><div class="card-header bg-white fw-bold text-primary">④ 납입기간 분포</div><div class="card-body"><div class="chart-container"><canvas id="hPayChart"></canvas></div></div></div></div>
+                    </div>
+
+                    <!-- 고객 타겟 분석 -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-7"><div class="card shadow border-0 h-100"><div class="card-header bg-white fw-bold text-primary">⑤ 연령대 × 심사형태 (유병자 간편심사 타겟 분석)</div><div class="card-body"><div class="chart-container"><canvas id="hAgeExamChart"></canvas></div></div></div></div>
+                        <div class="col-md-5"><div class="card shadow border-0 h-100"><div class="card-header bg-white fw-bold text-primary">⑥ 성별 가입 비중</div><div class="card-body"><div class="chart-container"><canvas id="hGenChart"></canvas></div></div></div></div>
+                    </div>
+
+                    <!-- 보험기간 × 납입기간 매트릭스 -->
+                    <div class="card shadow border-0 mb-4">
+                        <div class="card-header bg-white fw-bold fs-5 text-primary py-3"><i class="bi bi-grid-3x3-gap"></i> ⑦ 보험기간(W) × 납입기간(X) 교차 매트릭스 (건수)</div>
+                        <div class="card-body p-0">
+                            <table class="table table-bordered text-center align-middle mb-0">
+                                <thead class="table-dark"><tr><th>보장형태 ＼ 납입</th><th>10년</th><th>20년</th><th>30년</th><th class="table-secondary text-dark">합계</th></tr></thead>
+                                <tbody id="hPivotBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 베스트셀러 조합 -->
+                    <div class="card shadow border-0 mb-4">
+                        <div class="card-header bg-white fw-bold fs-5 text-primary py-3"><i class="bi bi-award"></i> ⑧ 베스트셀러 조합 Top 10 (구조·심사·보장·납입)</div>
+                        <div class="card-body p-0">
+                            <table class="table table-hover text-center align-middle mb-0">
+                                <thead class="table-light"><tr><th>순위</th><th class="text-start ps-4">상품 조합</th><th class="text-success">건수</th><th>실적(MCP)</th><th>비중</th></tr></thead>
+                                <tbody id="hComboBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 모집인 순위 -->
+                    <div class="card shadow border-0 mb-4">
+                        <div class="card-header bg-white fw-bold fs-5 text-primary py-3"><i class="bi bi-people-fill"></i> ⑨ 건강보험 다건 판매 모집인 순위</div>
+                        <div class="card-body p-0 table-scroll-area" style="max-height: 500px; overflow-y: auto;">
+                            <table class="table table-hover text-center align-middle mb-0">
+                                <thead class="table-light sticky-top shadow-sm"><tr><th>순위</th><th class="text-start ps-3">소속 및 모집인명</th><th class="text-success">건수</th><th>실적(MCP)</th><th>간편</th><th>일반</th><th>간편비율</th></tr></thead>
+                                <tbody id="hAgentBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="tab-pane fade" id="efficiency" role="tabpanel">
                 <div class="row g-4">
                     <div class="col-md-6">
@@ -286,10 +359,11 @@
 
 <script>
     // --- 1. 전역 상태 및 In-Memory 캐싱 ---
-    let globalParsedData = []; 
+    let globalParsedData = [];
     let globalGrmId = "";
-    let globalGrmMap = new Map();     
-    let globalProductMap = new Map(); 
+    let globalGrmMap = new Map();
+    let globalProductMap = new Map();
+    let superAdminMode = false; // 슈퍼관리자(회사 전체분석) 모드 상태
 
     const groupTypes = ['종합', '종신', '변액', '건강', '연금'];
     
@@ -301,6 +375,8 @@
     
     let agencyMap = new Map(); // 3-Depth 맵
     let isAllExpanded = false;
+
+    let healthStats = {}; // 건강보험 추가 분석 집계 컨테이너 (조회기간 기준)
     
     let activeAgentGroups = new Set(['종합']);
     let activeDemoGroups = new Set(['종합']);
@@ -390,6 +466,39 @@
         }
     });
 
+    // --- 2.5. 슈퍼관리자 모드 (회사 전체 데이터 분석) ---
+    function toggleSuperAdmin() {
+        const btn = document.getElementById('btnSuperAdmin');
+        const grmSelect = document.getElementById('grmIdSelect');
+        const noticeBadge = document.getElementById('initNotice');
+
+        if(superAdminMode) {
+            // 모드 해제 → 일반 GRM 분석으로 복귀
+            superAdminMode = false;
+            btn.className = 'btn btn-sm btn-outline-dark fw-bold';
+            btn.innerHTML = '<i class="bi bi-shield-lock"></i> 슈퍼관리자';
+            grmSelect.disabled = false;
+            noticeBadge.innerText = "최신 데이터 연동 완료";
+            noticeBadge.classList.remove('bg-danger');
+            noticeBadge.classList.add('bg-success');
+            return;
+        }
+
+        const pw = prompt("슈퍼관리자 암호를 입력하세요.");
+        if(pw === null) return; // 취소
+        if(pw !== 'godqhr84!') { alert("암호가 일치하지 않습니다."); return; }
+
+        // 모드 ON
+        superAdminMode = true;
+        btn.className = 'btn btn-sm btn-dark fw-bold';
+        btn.innerHTML = '<i class="bi bi-shield-fill-check"></i> 슈퍼관리자 ON (전체분석)';
+        grmSelect.disabled = true;
+        noticeBadge.innerText = "슈퍼관리자 모드 (GRM 구분 없이 전체분석)";
+        noticeBadge.classList.remove('bg-success', 'bg-warning');
+        noticeBadge.classList.add('bg-danger');
+        alert("슈퍼관리자 모드가 활성화되었습니다.\n이제 업로드하는 엑셀은 GRM 구분 없이 회사 전체 데이터로 분석됩니다.");
+    }
+
     // --- 3. Drag & Drop UI ---
     const dropZone = document.getElementById('dropZone');
     const targetFileInput = document.getElementById('targetFile');
@@ -423,14 +532,65 @@
     }
 
     // --- 4. 분석 엔진 1단계 ---
-    function getAgeGroup(yyyymmdd) {
-        if(!yyyymmdd || yyyymmdd.length < 6) return "미상";
+    function getAgeNum(yyyymmdd) {
+        if(!yyyymmdd || yyyymmdd.length < 6) return null;
         let yy = parseInt(yyyymmdd.substring(0, 2));
-        let year = yy > 26 ? 1900 + yy : 2000 + yy; 
-        let age = 2026 - year; 
+        let year = yy > 26 ? 1900 + yy : 2000 + yy;
+        return 2026 - year;
+    }
+
+    function getAgeGroup(yyyymmdd) {
+        let age = getAgeNum(yyyymmdd);
+        if(age === null) return "미상";
         if(age < 20) return "10대 이하"; if(age < 30) return "20대";
         if(age < 40) return "30대";      if(age < 50) return "40대";
         if(age < 60) return "50대";      return "60대 이상";
+    }
+
+    // === 건강보험 분류 엔진 ===
+    // 표출/정렬 안정성을 위한 카테고리 순서 정의
+    const H_STRUCT_ORDER   = ['미지급형', '갱신형', '표준형'];           // 상품구조(환급형태)
+    const H_EXAM_ORDER     = ['일반', '305', '335', '355', '3.10.5'];    // 심사형태 세부
+    const H_COVERAGE_ORDER = ['90세만기', '100세만기', '종신만기', '10년갱신', '20년갱신', '30년갱신']; // 보장형태(W열)
+    const H_PAY_ORDER      = ['10년납', '20년납', '30년납'];             // 납입기간(만기형 X열)
+    const H_AGE_ORDER      = ['10대 이하', '20대', '30대', '40대', '50대', '60대 이상', '미상'];
+    const H_WMAP = { '90':'90세만기', '100':'100세만기', '99':'종신만기', '10':'10년갱신', '20':'20년갱신', '30':'30년갱신' };
+
+    // 건강보험 상품 여부 판정 (하나로누리는건강보험 / 하나로라이트3.10.5 간편건강보험)
+    function isHealthProduct(prodName) {
+        if(!prodName) return false;
+        return prodName.includes('하나로누리는건강보험') || prodName.includes('하나로라이트3.10.5');
+    }
+
+    // 상품명 + W/X열을 분해하여 다차원 분류 객체 반환
+    function classifyHealth(prodName, w, x) {
+        const series = prodName.includes('하나로라이트3.10.5') ? '라이트3.10.5' : '누리는';
+
+        // 상품구조(환급형태)
+        let struct = '기타';
+        if(prodName.includes('해약환급금 미지급형')) struct = '미지급형';
+        else if(prodName.includes('갱신형')) struct = '갱신형';
+        else if(prodName.includes('표준형')) struct = '표준형';
+
+        // 심사형태 (라이트3.10.5 계열은 전부 3.10.5 간편)
+        let exam = '기타';
+        if(prodName.includes('일반심사')) exam = '일반';
+        else if(prodName.includes('355간편')) exam = '355';
+        else if(prodName.includes('335간편')) exam = '335';
+        else if(prodName.includes('305간편')) exam = '305';
+        else if(series === '라이트3.10.5') exam = '3.10.5';
+        const examGroup = (exam === '일반') ? '일반심사' : '간편심사';
+
+        // 보장형태 (W열): 만기형 vs 갱신형
+        const ws = String(w || '').replace(/[^\d]/g, '');
+        const coverage = H_WMAP[ws] || '기타';
+        const isRenewal = ['10', '20', '30'].includes(ws);
+
+        // 납입기간 (X열): 만기형은 'N년납', 갱신형은 갱신주기와 동일하므로 'N년갱신납'으로 표기
+        const xs = String(x || '').replace(/[^\d]/g, '');
+        const pay = isRenewal ? (xs ? xs + '년갱신납' : '기타') : (xs ? xs + '년납' : '기타');
+
+        return { series, struct, exam, examGroup, coverage, isRenewal, pay, ws, xs };
     }
 
     function renderChart(canvasId, type, labels, data, colors, title) {
@@ -443,22 +603,41 @@
         });
     }
 
+    function renderStackedBar(canvasId, labels, datasets) {
+        if(chartInstances[canvasId]) chartInstances[canvasId].destroy();
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        chartInstances[canvasId] = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+                plugins: { legend: { position: 'top' } }
+            }
+        });
+    }
+
     function startAnalysis() {
         const grmId = document.getElementById('grmIdSelect').value.trim();
         const targetFile = document.getElementById('targetFile').files[0];
 
-        if(!grmId) return alert("GRM 담당자를 선택해주세요.");
         if(!targetFile) return alert("타겟 데이터 엑셀 파일을 업로드해주세요.");
 
-        globalGrmId = grmId;
-        
-        let branchSet = globalGrmMap.get(grmId);
-        if(!branchSet) return alert("지점코드 매핑 데이터가 없습니다.");
+        let branchArray = [];
+        if(superAdminMode) {
+            // 슈퍼관리자: GRM 선택 불필요, 전체 데이터 분석
+            globalGrmId = "전체(슈퍼관리자)";
+        } else {
+            if(!grmId) return alert("GRM 담당자를 선택해주세요.");
+            globalGrmId = grmId;
+            let branchSet = globalGrmMap.get(grmId);
+            if(!branchSet) return alert("지점코드 매핑 데이터가 없습니다.");
+            branchArray = Array.from(branchSet);
+        }
 
         document.getElementById('loadingText').innerText = "백그라운드 엔진으로 수만 건 데이터를 파싱 중입니다...";
         document.getElementById('loadingSpinner').style.display = 'flex';
 
-        const branchArray = Array.from(branchSet);
         const productObj = Object.fromEntries(globalProductMap);
 
         const reader = new FileReader();
@@ -504,7 +683,7 @@
                 worker.terminate();
             };
 
-            worker.postMessage({ fileBuffer, branchArray, productObj }, [fileBuffer]);
+            worker.postMessage({ fileBuffer, branchArray, productObj, superAdmin: superAdminMode }, [fileBuffer]);
         };
         
         reader.readAsArrayBuffer(targetFile);
@@ -539,7 +718,18 @@
         agentMap.clear(); dxMap.clear();
         groupTypes.forEach(g => demoStats[g] = { age: {}, gen: {} });
         
-        agencyMap.clear(); 
+        agencyMap.clear();
+
+        // 건강보험 집계 컨테이너 초기화 (조회기간 기준)
+        healthStats = {
+            cnt: 0, mcp: 0, ageSum: 0, ageCnt: 0, simpleCnt: 0, generalCnt: 0,
+            struct: {}, exam: {}, examGroup: {}, coverage: {}, pay: {}, series: {},
+            age: {}, gen: {},
+            ageExam: {},   // 연령대 -> { 간편심사:n, 일반심사:n }
+            wx: {},        // 보장형태(coverage) -> { '10':n, '20':n, '30':n }
+            combo: {},     // 조합 key -> { cnt, mcp }
+            agents: new Map() // agtId -> { display, cnt, mcp, simple, general }
+        };
 
         for(let item of globalParsedData) {
             let isPeriod = (item.rawDate >= startVal && item.rawDate <= endVal);
@@ -608,9 +798,57 @@
                 }
             }
             if(item.dxType) dxMap.set(item.dxType, (dxMap.get(item.dxType)||0)+1);
+
+            // === 건강보험 추가 분석 집계 (조회기간 & 건강보험 상품 한정) ===
+            if(isPeriod && isHealthProduct(item.prodName)) {
+                const h = classifyHealth(item.prodName, item.wTerm, item.xTerm);
+                const hs = healthStats;
+
+                hs.cnt++; hs.mcp += item.mcp;
+
+                let ageNum = getAgeNum(item.yy);
+                if(ageNum !== null) { hs.ageSum += ageNum; hs.ageCnt++; }
+                if(h.examGroup === '간편심사') hs.simpleCnt++; else hs.generalCnt++;
+
+                const bump = (obj, key) => { obj[key] = (obj[key]||0) + 1; };
+                bump(hs.struct, h.struct);
+                bump(hs.exam, h.exam);
+                bump(hs.examGroup, h.examGroup);
+                bump(hs.coverage, h.coverage);
+                bump(hs.pay, h.pay);
+                bump(hs.series, h.series);
+
+                // 연령/성별 분포 (건강보험 한정)
+                let ageGroup = getAgeGroup(item.yy);
+                bump(hs.age, ageGroup);
+                if(item.gen) bump(hs.gen, item.gen);
+
+                // 연령대 × 심사그룹 교차 (유병자 간편심사 가설 검증용)
+                if(!hs.ageExam[ageGroup]) hs.ageExam[ageGroup] = { '간편심사':0, '일반심사':0 };
+                hs.ageExam[ageGroup][h.examGroup]++;
+
+                // 보장형태(W) × 납입기간(X) 매트릭스
+                if(!hs.wx[h.coverage]) hs.wx[h.coverage] = {};
+                if(h.xs) hs.wx[h.coverage][h.xs] = (hs.wx[h.coverage][h.xs]||0) + 1;
+
+                // 베스트셀러 조합 (구조 / 심사 / 보장형태 / 납입)
+                const comboKey = `${h.struct} · ${h.exam==='일반'?'일반심사':h.exam+'간편'} · ${h.coverage} · ${h.pay}`;
+                if(!hs.combo[comboKey]) hs.combo[comboKey] = { cnt:0, mcp:0 };
+                hs.combo[comboKey].cnt++; hs.combo[comboKey].mcp += item.mcp;
+
+                // 모집인별 건강보험 실적 (다건 판매자 탐지)
+                if(item.agtId) {
+                    if(!hs.agents.has(item.agtId)) {
+                        hs.agents.set(item.agtId, { display: item.agtDisplay, cnt:0, mcp:0, simple:0, general:0 });
+                    }
+                    let ha = hs.agents.get(item.agtId);
+                    ha.cnt++; ha.mcp += item.mcp;
+                    if(h.examGroup === '간편심사') ha.simple++; else ha.general++;
+                }
+            }
         }
 
-        renderSummary(); renderAgentUI(); renderDemoUI(); renderEfficiency();
+        renderSummary(); renderAgentUI(); renderDemoUI(); renderHealth(); renderEfficiency();
     }
 
     // --- 6. UI 렌더링 서브 모듈 ---
@@ -830,6 +1068,115 @@
         renderChart('genderChart', 'doughnut', genKeys, genKeys.map(k=>aggDemo.gen[k]), ['#36a2eb','#ff6384'], '성별 분포');
     }
 
+    // === 건강보험 추가 분석 렌더링 ===
+    function renderHealth() {
+        const hs = healthStats;
+        const emptyEl = document.getElementById('healthEmpty');
+        const contentEl = document.getElementById('healthContent');
+
+        if(!hs || hs.cnt === 0) {
+            emptyEl.style.display = 'block';
+            contentEl.style.display = 'none';
+            return;
+        }
+        emptyEl.style.display = 'none';
+        contentEl.style.display = 'block';
+
+        // KPI 카드
+        document.getElementById('h_total_cnt').innerText = formatNum(hs.cnt) + "건";
+        document.getElementById('h_total_mcp').innerText = formatNum(hs.mcp);
+        document.getElementById('h_avg_mcp').innerText = formatNum(hs.cnt > 0 ? hs.mcp / hs.cnt : 0);
+        document.getElementById('h_simple_ratio').innerText = (hs.cnt > 0 ? Math.round(hs.simpleCnt / hs.cnt * 100) : 0) + "%";
+        document.getElementById('h_avg_age').innerText = (hs.ageCnt > 0 ? Math.round(hs.ageSum / hs.ageCnt) : 0) + "세";
+
+        // 순서 정렬 + 0건 제거 유틸
+        const buildOrdered = (obj, order) => {
+            let labels = [], data = [];
+            order.forEach(k => { if(obj[k]) { labels.push(k); data.push(obj[k]); } });
+            // 정의 순서에 없는 '기타' 등도 포함
+            Object.keys(obj).forEach(k => { if(!order.includes(k)) { labels.push(k); data.push(obj[k]); } });
+            return { labels, data };
+        };
+
+        const palette = ['#dc3545','#0d6efd','#198754','#ffc107','#6f42c1','#fd7e14','#20c997','#6c757d'];
+
+        // ① 상품구조 도넛
+        let st = buildOrdered(hs.struct, H_STRUCT_ORDER);
+        renderChart('hStructChart', 'doughnut', st.labels, st.data, palette, '상품구조');
+
+        // ② 심사형태 막대
+        let ex = buildOrdered(hs.exam, H_EXAM_ORDER);
+        let exLabels = ex.labels.map(l => l === '일반' ? '일반심사' : l + '간편');
+        renderChart('hExamChart', 'bar', exLabels, ex.data, '#0d6efd', '심사형태');
+
+        // ③ 보장형태 막대
+        let cov = buildOrdered(hs.coverage, H_COVERAGE_ORDER);
+        renderChart('hCoverageChart', 'bar', cov.labels, cov.data, '#198754', '보장형태');
+
+        // ④ 납입기간 도넛 (만기형 N년납 + 갱신형 N년갱신납 통합 표출)
+        let payOrder = ['10년납','20년납','30년납','10년갱신납','20년갱신납','30년갱신납'];
+        let pay = buildOrdered(hs.pay, payOrder);
+        renderChart('hPayChart', 'doughnut', pay.labels, pay.data, palette, '납입기간');
+
+        // ⑤ 연령대 × 심사형태 (Stacked)
+        let ageLabels = H_AGE_ORDER.filter(a => hs.ageExam[a]);
+        let simpleData = ageLabels.map(a => hs.ageExam[a]['간편심사'] || 0);
+        let generalData = ageLabels.map(a => hs.ageExam[a]['일반심사'] || 0);
+        renderStackedBar('hAgeExamChart', ageLabels, [
+            { label: '간편심사', data: simpleData, backgroundColor: '#ffc107' },
+            { label: '일반심사', data: generalData, backgroundColor: '#0d6efd' }
+        ]);
+
+        // ⑥ 성별 도넛
+        let genKeys = Object.keys(hs.gen);
+        renderChart('hGenChart', 'doughnut', genKeys, genKeys.map(k => hs.gen[k]), ['#36a2eb','#ff6384','#6c757d'], '성별');
+
+        // ⑦ 보험기간(W) × 납입기간(X) 매트릭스
+        let pivotBody = document.getElementById('hPivotBody');
+        let pivotHtml = [];
+        let colTotals = { '10':0, '20':0, '30':0 };
+        let grandTotal = 0;
+        H_COVERAGE_ORDER.concat(Object.keys(hs.wx).filter(k => !H_COVERAGE_ORDER.includes(k)))
+          .filter(cv => hs.wx[cv]).forEach(cv => {
+            let row = hs.wx[cv];
+            let c10 = row['10']||0, c20 = row['20']||0, c30 = row['30']||0;
+            let rowSum = c10 + c20 + c30 + Object.keys(row).filter(k=>!['10','20','30'].includes(k)).reduce((s,k)=>s+row[k],0);
+            colTotals['10'] += c10; colTotals['20'] += c20; colTotals['30'] += c30; grandTotal += rowSum;
+            pivotHtml.push(`<tr><td class="fw-bold text-start ps-3">${cv}</td><td>${c10?formatNum(c10):'-'}</td><td>${c20?formatNum(c20):'-'}</td><td>${c30?formatNum(c30):'-'}</td><td class="table-secondary fw-bold">${formatNum(rowSum)}</td></tr>`);
+        });
+        pivotHtml.push(`<tr class="table-dark fw-bold"><td class="text-start ps-3">합계</td><td>${formatNum(colTotals['10'])}</td><td>${formatNum(colTotals['20'])}</td><td>${formatNum(colTotals['30'])}</td><td>${formatNum(grandTotal)}</td></tr>`);
+        pivotBody.innerHTML = pivotHtml.join('');
+
+        // ⑧ 베스트셀러 조합 Top 10
+        let comboBody = document.getElementById('hComboBody');
+        let comboArr = Object.entries(hs.combo).sort((a,b) => b[1].cnt - a[1].cnt).slice(0, 10);
+        comboBody.innerHTML = comboArr.map(([key, v], idx) => `
+            <tr>
+                <td><span class="badge ${idx<3?'bg-danger':'bg-secondary'}">${idx+1}</span></td>
+                <td class="text-start ps-4 fw-bold">${key}</td>
+                <td class="text-success fw-bold">${formatNum(v.cnt)}</td>
+                <td>${formatNum(v.mcp)}</td>
+                <td>${(v.cnt/hs.cnt*100).toFixed(1)}%</td>
+            </tr>`).join('');
+
+        // ⑨ 모집인 다건 판매 순위
+        let agentBody = document.getElementById('hAgentBody');
+        let agentArr = Array.from(hs.agents.values()).sort((a,b) => {
+            if(b.cnt !== a.cnt) return b.cnt - a.cnt;
+            return b.mcp - a.mcp;
+        });
+        agentBody.innerHTML = agentArr.map((a, idx) => `
+            <tr>
+                <td><span class="badge ${idx<3?'bg-danger':'bg-secondary'}">${idx+1}</span></td>
+                <td class="text-start ps-3 fw-bold">${a.display}</td>
+                <td class="text-success fw-bold">${formatNum(a.cnt)}</td>
+                <td>${formatNum(a.mcp)}</td>
+                <td>${formatNum(a.simple)}</td>
+                <td>${formatNum(a.general)}</td>
+                <td>${(a.cnt>0?Math.round(a.simple/a.cnt*100):0)}%</td>
+            </tr>`).join('');
+    }
+
     function renderEfficiency() {
         document.getElementById('ui_avg_mcp').innerText = formatNum(totAccCnt > 0 ? totAccMcp / totAccCnt : 0) + " MCP";
         let dxKeys = Array.from(dxMap.keys());
@@ -909,11 +1256,12 @@
             const margin = 10;
             const renderWidth = pdfWidth - (margin * 2);
 
-            const tabIds = ['summary', 'agents', 'demo', 'efficiency'];
+            const tabIds = ['summary', 'agents', 'demo', 'health', 'efficiency'];
             const tabButtons = [
-                'button[data-bs-target="#summary"]', 
-                'button[data-bs-target="#agents"]', 
-                'button[data-bs-target="#demo"]', 
+                'button[data-bs-target="#summary"]',
+                'button[data-bs-target="#agents"]',
+                'button[data-bs-target="#demo"]',
+                'button[data-bs-target="#health"]',
                 'button[data-bs-target="#efficiency"]'
             ];
             
@@ -1106,8 +1454,87 @@
         
         applyExcelNumberFormat(wsData);
         XLSX.utils.book_append_sheet(wb, wsData, `${globalGrmId}_계약_RawData`);
-        
+
         XLSX.writeFile(wb, `${globalGrmId}_업적분석_최종보고서.xlsx`);
+    }
+
+    // === 건강보험 분석 전용 엑셀 (다중 시트) ===
+    function downloadHealthExcel() {
+        const hs = healthStats;
+        if(!hs || hs.cnt === 0) return alert("조회기간 내 건강보험 데이터가 없습니다.");
+
+        let sDate = document.getElementById('startDate').value;
+        let eDate = document.getElementById('endDate').value;
+        const wb = XLSX.utils.book_new();
+        const blank = ["", "", "", "", ""];
+
+        // 시트1: 형태별 요약
+        let sum = [
+            ["💗 건강보험 심층 분석 리포트"],
+            ["기준 GRM:", globalGrmId, "조회기간:", `${sDate} ~ ${eDate}`],
+            ["총 건수:", hs.cnt, "총 MCP:", hs.mcp],
+            ["평균 객단가(MCP):", Math.round(hs.cnt>0?hs.mcp/hs.cnt:0), "평균 가입연령:", Math.round(hs.ageCnt>0?hs.ageSum/hs.ageCnt:0)],
+            ["간편심사:", hs.simpleCnt, "일반심사:", hs.generalCnt],
+            blank,
+            ["[1. 상품구조(환급형태)]", "건수"]
+        ];
+        H_STRUCT_ORDER.forEach(k => { if(hs.struct[k]) sum.push([k, hs.struct[k]]); });
+        sum.push(blank, ["[2. 심사형태]", "건수"]);
+        H_EXAM_ORDER.forEach(k => { if(hs.exam[k]) sum.push([k==='일반'?'일반심사':k+'간편', hs.exam[k]]); });
+        sum.push(blank, ["[3. 보장형태]", "건수"]);
+        H_COVERAGE_ORDER.forEach(k => { if(hs.coverage[k]) sum.push([k, hs.coverage[k]]); });
+        sum.push(blank, ["[4. 납입기간]", "건수"]);
+        Object.keys(hs.pay).forEach(k => sum.push([k, hs.pay[k]]));
+        const wsSum = XLSX.utils.aoa_to_sheet(sum);
+        wsSum['!cols'] = [{wch: 24}, {wch: 14}, {wch: 18}, {wch: 18}];
+        applyExcelNumberFormat(wsSum);
+        XLSX.utils.book_append_sheet(wb, wsSum, "형태별요약");
+
+        // 시트2: 보험기간 × 납입기간 매트릭스
+        let mtx = [["보장형태 \\ 납입", "10년", "20년", "30년", "합계"]];
+        H_COVERAGE_ORDER.concat(Object.keys(hs.wx).filter(k=>!H_COVERAGE_ORDER.includes(k))).filter(cv=>hs.wx[cv]).forEach(cv => {
+            let row = hs.wx[cv];
+            let c10=row['10']||0, c20=row['20']||0, c30=row['30']||0;
+            mtx.push([cv, c10, c20, c30, c10+c20+c30]);
+        });
+        const wsMtx = XLSX.utils.aoa_to_sheet(mtx);
+        wsMtx['!cols'] = [{wch: 16}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}];
+        applyExcelNumberFormat(wsMtx);
+        XLSX.utils.book_append_sheet(wb, wsMtx, "보험기간X납입기간");
+
+        // 시트3: 베스트셀러 조합
+        let combo = [["순위", "상품 조합 (구조·심사·보장·납입)", "건수", "실적(MCP)", "비중(%)"]];
+        Object.entries(hs.combo).sort((a,b)=>b[1].cnt-a[1].cnt).forEach(([key,v],idx) => {
+            combo.push([idx+1, key, v.cnt, v.mcp, Number((v.cnt/hs.cnt*100).toFixed(1))]);
+        });
+        const wsCombo = XLSX.utils.aoa_to_sheet(combo);
+        wsCombo['!cols'] = [{wch: 8}, {wch: 50}, {wch: 10}, {wch: 14}, {wch: 10}];
+        applyExcelNumberFormat(wsCombo);
+        XLSX.utils.book_append_sheet(wb, wsCombo, "베스트셀러조합");
+
+        // 시트4: 모집인 순위
+        let agt = [["순위", "소속 및 모집인명", "건수", "실적(MCP)", "간편", "일반", "간편비율(%)"]];
+        Array.from(hs.agents.values()).sort((a,b)=> b.cnt!==a.cnt ? b.cnt-a.cnt : b.mcp-a.mcp).forEach((a,idx) => {
+            agt.push([idx+1, a.display, a.cnt, a.mcp, a.simple, a.general, a.cnt>0?Math.round(a.simple/a.cnt*100):0]);
+        });
+        const wsAgt = XLSX.utils.aoa_to_sheet(agt);
+        wsAgt['!cols'] = [{wch: 8}, {wch: 35}, {wch: 10}, {wch: 14}, {wch: 8}, {wch: 8}, {wch: 12}];
+        applyExcelNumberFormat(wsAgt);
+        XLSX.utils.book_append_sheet(wb, wsAgt, "모집인순위");
+
+        // 시트5: 연령·성별
+        let demo = [["[연령대별 건강보험 가입]", "건수", "그중 간편", "그중 일반"]];
+        H_AGE_ORDER.forEach(a => {
+            if(hs.age[a]) demo.push([a, hs.age[a], (hs.ageExam[a]?hs.ageExam[a]['간편심사']:0)||0, (hs.ageExam[a]?hs.ageExam[a]['일반심사']:0)||0]);
+        });
+        demo.push(blank.slice(0,4), ["[성별 건강보험 가입]", "건수"]);
+        Object.keys(hs.gen).forEach(g => demo.push([g, hs.gen[g]]));
+        const wsDemo = XLSX.utils.aoa_to_sheet(demo);
+        wsDemo['!cols'] = [{wch: 22}, {wch: 12}, {wch: 12}, {wch: 12}];
+        applyExcelNumberFormat(wsDemo);
+        XLSX.utils.book_append_sheet(wb, wsDemo, "연령성별");
+
+        XLSX.writeFile(wb, `${globalGrmId}_건강보험분석_${Date.now()}.xlsx`);
     }
 </script>
 </body>

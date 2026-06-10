@@ -1,11 +1,11 @@
-// [worker.js] v0.6.7 백그라운드 멀티스레딩 연산 엔진 (S열 상태 필터링 추가)
+// [worker.js] v0.7.0 백그라운드 멀티스레딩 연산 엔진 (슈퍼관리자 전체분석 + 건강보험 필드 추가)
 
 importScripts('https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js');
 
 self.onmessage = function(e) {
     try {
-        const { fileBuffer, branchArray, productObj } = e.data;
-        const branchSet = new Set(branchArray); 
+        const { fileBuffer, branchArray, productObj, superAdmin } = e.data;
+        const branchSet = new Set(branchArray);
 
         const targetWb = XLSX.read(new Uint8Array(fileBuffer), { type: 'array' });
         const targetData = XLSX.utils.sheet_to_json(targetWb.Sheets[targetWb.SheetNames[0]], {header: 1});
@@ -25,9 +25,10 @@ self.onmessage = function(e) {
             const contractStatus = String(row[18] || "").trim();
             if(['취소', '청약철회', '지급(소멸)'].includes(contractStatus)) continue;
             
-            const branchCode = String(row[3]).trim(); 
-            
-            if(branchSet.has(branchCode)) {
+            const branchCode = String(row[3]).trim();
+
+            // 슈퍼관리자 모드: 지점필터 우회(회사 전체분석). 일반 모드: 해당 GRM 소속 지점만 추출.
+            if(superAdmin || branchSet.has(branchCode)) {
                 resultData.push(row); 
                 
                 let rawDate = String(row[0] || "").replace(/[^\d]/g, "");
@@ -52,7 +53,12 @@ self.onmessage = function(e) {
                     yy: String(row[16] || "").replace(/[^\d]/g, ""),
                     gen: String(row[17] || "").trim(),
                     dxType: String(row[34] || "").trim(),
-                    
+
+                    // 건강보험 추가 분석용 원본 필드 (분류는 메인 스레드 classifyHealth에서 수행)
+                    prodName: prodName,                                   // V열 상품명 원본
+                    wTerm: String(row[22] || "").replace(/[^\d]/g, ""),   // W열 보험기간 (90/100/99/10/20/30)
+                    xTerm: String(row[23] || "").replace(/[^\d]/g, ""),   // X열 납입기간 (10/20/30)
+
                     // 대리점 3Depth 아코디언 매핑용 데이터
                     agencyName: String(row[1] || "").trim() || "기타대리점", // B열
                     branchName: String(row[2] || "").trim() || "기타지점",   // C열
