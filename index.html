@@ -44,12 +44,32 @@
     <p class="text-warning mt-2">※ 백그라운드 엔진 가동 중</p>
 </div>
 
+<div class="modal fade" id="superAdminModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="bi bi-shield-lock"></i> 슈퍼관리자 인증</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label fw-bold">암호를 입력하세요</label>
+                <input type="password" id="superAdminPw" class="form-control form-control-lg" placeholder="••••••••" autocomplete="off">
+                <div id="superAdminPwError" class="text-danger fw-bold mt-2" style="display:none;"><i class="bi bi-exclamation-triangle"></i> 암호가 일치하지 않습니다.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-dark fw-bold" onclick="verifySuperAdminPw()"><i class="bi bi-unlock"></i> 인증</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="container mt-4 mb-5" id="mainContainer">
     
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>📊 HanaLife GA 업적 분석 시스템 
             <span class="badge bg-primary fs-6 align-middle ms-1">Enterprise</span>
-            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.7.0</span>
+            <span class="badge bg-dark fs-6 align-middle ms-1 shadow-sm">v0.8.0</span>
         </h2>
         
         <div id="exportBtnGroup" style="display:none;" class="btn-group shadow-sm">
@@ -121,6 +141,7 @@
             <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#agents" type="button"><i class="bi bi-person-badge"></i> 우수 모집인 분석</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#demo" type="button"><i class="bi bi-pie-chart"></i> 고객 데모그래픽</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-danger" data-bs-toggle="tab" data-bs-target="#health" type="button"><i class="bi bi-heart-pulse"></i> 건강보험 추가 분석</button></li>
+            <li class="nav-item" role="presentation" id="riderTabNav" style="display:none;"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#rider" type="button"><i class="bi bi-clipboard2-pulse"></i> 특약 분석 <span class="badge bg-dark ms-1" style="font-size:0.6rem;">슈퍼관리자</span></button></li>
             <li class="nav-item" role="presentation"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#efficiency" type="button"><i class="bi bi-lightning-charge"></i> 영업 효율 및 객단가</button></li>
         </ul>
 
@@ -333,6 +354,48 @@
                 </div>
             </div>
 
+            <div class="tab-pane fade" id="rider" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="fw-bold text-dark mb-0"><i class="bi bi-clipboard2-pulse"></i> 특약 분석 <span class="badge bg-dark ms-1" style="font-size:0.65rem;">슈퍼관리자 전용</span></h4>
+                    <div>
+                        <button class="btn btn-outline-primary fw-bold shadow-sm" onclick="document.getElementById('riderFile').click()"><i class="bi bi-upload"></i> 수집결과.xlsx 업로드</button>
+                        <input type="file" id="riderFile" class="d-none" accept=".xlsx,.xls" onchange="handleRiderFile(event)">
+                        <button class="btn btn-success fw-bold shadow-sm" onclick="exportPremiumJSON()"><i class="bi bi-filetype-json"></i> 보험료표 내보내기(JSON)</button>
+                    </div>
+                </div>
+
+                <div id="riderEmpty" class="alert alert-secondary text-center py-5">
+                    <i class="bi bi-info-circle fs-3 d-block mb-2"></i>
+                    먼저 <b>건별엑셀로 분석을 실행</b>한 뒤, 자동수집기 산출물 <b>수집결과.xlsx</b>를 업로드하세요.<br>
+                    <span class="text-muted">증권번호로 건별엑셀과 결합하여 설계형태·연령·성별별 특약 단가를 산출합니다.</span>
+                </div>
+
+                <div id="riderContent" style="display:none;">
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3 col-6"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">특약 종류</div><h3 class="fw-bold text-primary mb-0" id="r_riders">0</h3></div></div></div>
+                        <div class="col-md-3 col-6"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">결합 계약(증번)</div><h3 class="fw-bold text-success mb-0" id="r_contracts">0</h3></div></div></div>
+                        <div class="col-md-3 col-6"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">보험료표 조합</div><h3 class="fw-bold text-dark mb-0" id="r_combos">0</h3></div></div></div>
+                        <div class="col-md-3 col-6"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3"><div class="text-muted fw-bold small mb-1">JOIN 실패</div><h3 class="fw-bold text-danger mb-0" id="r_miss">0</h3></div></div></div>
+                    </div>
+
+                    <div class="card shadow border-0 mb-4">
+                        <div class="card-header bg-white fw-bold fs-5 text-primary py-3"><i class="bi bi-bar-chart-steps"></i> 특약별 채택 순위 · 단위 추론 · 최대가입금액</div>
+                        <div class="card-body p-0 table-scroll-area" style="max-height: 640px; overflow-y: auto;">
+                            <table class="table table-hover text-center align-middle mb-0">
+                                <thead class="table-light sticky-top shadow-sm">
+                                    <tr><th>순위</th><th>특약코드</th><th class="text-start">특약명</th><th class="text-success">채택 계약수</th><th>추론 단위</th><th>금액 종류수</th><th>최대가입금액</th><th>비고</th></tr>
+                                </thead>
+                                <tbody id="riderTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="text-muted small px-1">
+                        ※ <b>추론 단위</b>는 관측된 가입금액들의 최대공약수(GCD)로 자동 산출됩니다. <b>금액 종류수</b>가 1이면 단위가 과대추정될 수 있어 <span class="badge bg-warning text-dark">단위 추정</span>으로 표시됩니다 — 전체 수집이 쌓이면 정확해집니다.<br>
+                        ※ 실제 보험료 계산의 기준은 <b>비례단가(보험료÷가입금액)</b>이며, 조합·특약별 단가는 [보험료표 내보내기(JSON)]에 모두 포함됩니다.
+                    </div>
+                </div>
+            </div>
+
             <div class="tab-pane fade" id="efficiency" role="tabpanel">
                 <div class="row g-4">
                     <div class="col-md-6">
@@ -376,7 +439,13 @@
     let agencyMap = new Map(); // 3-Depth 맵
     let isAllExpanded = false;
 
-    let healthStats = {}; // 건강보험 추가 분석 집계 컨테이너 (조회기간 기준)
+    let healthStats = {}; // 건강보험 추가 분석 집계 컨테이너
+
+    // 특약 분석(슈퍼관리자) — 보험료표 데이터
+    const PREMIUM_UNIT_BASE = 10000000; // (참고용 기준단위 1천만원, 단위는 특약별 GCD로 자동산출)
+    let premiumTable = new Map();  // comboKey "구조|심사|보장|납입|보험나이|성별" → Map(특약코드 → {name, rateSum, rateN, maxAmt, n})
+    let riderUnits = new Map();    // 특약코드 → {name, amounts:Set, unit, unitLabel, freq}
+    let premiumMeta = {};          // 산출 메타(건수 등) (조회기간 기준)
     
     let activeAgentGroups = new Set(['종합']);
     let activeDemoGroups = new Set(['종합']);
@@ -467,6 +536,8 @@
     });
 
     // --- 2.5. 슈퍼관리자 모드 (회사 전체 데이터 분석) ---
+    let superAdminModalIns = null;
+
     function toggleSuperAdmin() {
         const btn = document.getElementById('btnSuperAdmin');
         const grmSelect = document.getElementById('grmIdSelect');
@@ -481,23 +552,54 @@
             noticeBadge.innerText = "최신 데이터 연동 완료";
             noticeBadge.classList.remove('bg-danger');
             noticeBadge.classList.add('bg-success');
+            document.getElementById('riderTabNav').style.display = 'none'; // 특약분석 탭 숨김
             return;
         }
 
-        const pw = prompt("슈퍼관리자 암호를 입력하세요.");
-        if(pw === null) return; // 취소
-        if(pw !== 'godqhr84!') { alert("암호가 일치하지 않습니다."); return; }
+        // 암호 입력 모달 표출 (입력값은 type=password 로 마스킹됨)
+        const pwInput = document.getElementById('superAdminPw');
+        const pwError = document.getElementById('superAdminPwError');
+        pwInput.value = "";
+        pwError.style.display = 'none';
+        if(!superAdminModalIns) superAdminModalIns = new bootstrap.Modal(document.getElementById('superAdminModal'));
+        superAdminModalIns.show();
+        setTimeout(() => pwInput.focus(), 300);
+    }
 
-        // 모드 ON
+    function verifySuperAdminPw() {
+        const pwInput = document.getElementById('superAdminPw');
+        const pwError = document.getElementById('superAdminPwError');
+
+        if(pwInput.value !== 'godqhr84!') {
+            pwError.style.display = 'block';
+            pwInput.value = "";
+            pwInput.focus();
+            return;
+        }
+
+        // 인증 성공 → 모드 ON
         superAdminMode = true;
+        const btn = document.getElementById('btnSuperAdmin');
+        const grmSelect = document.getElementById('grmIdSelect');
+        const noticeBadge = document.getElementById('initNotice');
+
         btn.className = 'btn btn-sm btn-dark fw-bold';
         btn.innerHTML = '<i class="bi bi-shield-fill-check"></i> 슈퍼관리자 ON (전체분석)';
         grmSelect.disabled = true;
         noticeBadge.innerText = "슈퍼관리자 모드 (GRM 구분 없이 전체분석)";
         noticeBadge.classList.remove('bg-success', 'bg-warning');
         noticeBadge.classList.add('bg-danger');
-        alert("슈퍼관리자 모드가 활성화되었습니다.\n이제 업로드하는 엑셀은 GRM 구분 없이 회사 전체 데이터로 분석됩니다.");
+
+        document.getElementById('riderTabNav').style.display = ''; // 특약분석 탭 노출
+
+        if(superAdminModalIns) superAdminModalIns.hide();
+        alert("슈퍼관리자 모드가 활성화되었습니다.\n이제 업로드하는 엑셀은 GRM 구분 없이 회사 전체 데이터로 분석됩니다.\n\n[특약 분석] 탭이 활성화되었습니다.");
     }
+
+    // Enter 키로 슈퍼관리자 인증 제출
+    document.getElementById('superAdminPw').addEventListener('keydown', (e) => {
+        if(e.key === 'Enter') { e.preventDefault(); verifySuperAdminPw(); }
+    });
 
     // --- 3. Drag & Drop UI ---
     const dropZone = document.getElementById('dropZone');
@@ -1014,12 +1116,14 @@
         let activeNames = Array.from(activeAgentGroups).join('+');
         document.getElementById('agentChartTitle').innerHTML = `<i class="bi bi-bar-chart-fill"></i> [${activeNames}] Top 10 모집인 퍼포먼스`;
         
-        let aTbody = document.getElementById('agentTableBody'); aTbody.innerHTML = "";
+        let aTbody = document.getElementById('agentTableBody');
         if(sorted.length === 0) {
             aTbody.innerHTML = `<tr><td colspan="6" class="text-muted py-4">실적이 존재하지 않습니다.</td></tr>`;
         } else {
+            // String Builder 패턴: innerHTML += 반복(O(N²) 리플로우) 제거 → 1회 주입으로 정렬 렉 해소
+            let rows = [];
             sorted.forEach((a, idx) => {
-                aTbody.innerHTML += `
+                rows.push(`
                     <tr>
                         <td><span class="badge ${idx<3?'bg-danger':'bg-secondary'}">${idx+1}</span></td>
                         <td class="text-start fw-bold text-dark">${a.display}</td>
@@ -1027,8 +1131,9 @@
                         <td>${formatNum(a.agg.pC)}</td>
                         <td class="text-primary fw-bold">${formatNum(a.agg.aM)}</td>
                         <td>${formatNum(a.agg.aC)}</td>
-                    </tr>`;
+                    </tr>`);
             });
+            aTbody.innerHTML = rows.join('');
         }
 
         let chartLabels = top10.map(a => { let parts = a.display.split('-'); return parts.length > 1 ? parts[1].trim() : a.display; });
@@ -1175,6 +1280,188 @@
                 <td>${formatNum(a.general)}</td>
                 <td>${(a.cnt>0?Math.round(a.simple/a.cnt*100):0)}%</td>
             </tr>`).join('');
+    }
+
+    // === 특약 분석(슈퍼관리자): 정제 엔진 ===
+    function gcd2(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a; }
+
+    function humanUnit(n) {
+        if (!n) return '-';
+        if (n % 100000000 === 0) return (n / 100000000) + '억';
+        if (n % 10000000 === 0) return (n / 10000000) + '천만원';
+        if (n % 1000000 === 0) return (n / 1000000) + '백만원';
+        if (n % 10000 === 0) return (n / 10000) + '만원';
+        return formatNum(n) + '원';
+    }
+
+    // 건별엑셀(globalResultData 원본행)에서 증번 → {상품명, W, X} 맵 구성
+    function buildJgnoMap() {
+        let m = new Map();
+        for (let i = 1; i < globalResultData.length; i++) {
+            let row = globalResultData[i];
+            if (!row) continue;
+            let jg = String(row[11] || '').trim(); // L열 증권번호
+            if (jg) m.set(jg, { prod: String(row[21] || ''), w: row[22], x: row[23] });
+        }
+        return m;
+    }
+
+    // 수집결과 행배열 + 건별 JOIN → premiumTable / riderUnits 구축
+    function buildPremiumData(rows) {
+        const jmap = buildJgnoMap();
+        premiumTable = new Map();
+        riderUnits = new Map();
+        let joinOk = 0, joinMiss = 0;
+        let contracts = new Set();
+        let riderFreq = new Map(); // 특약코드 → Set(증번)  (채택 계약수)
+
+        // 수집결과 컬럼: 0증번 2성별 4보험나이 10구분 11특약코드 12특약명 15가입금액 16보험료
+        for (let i = 1; i < rows.length; i++) {
+            let r = rows[i];
+            if (!r) continue;
+            let jg = String(r[0] || '').trim();
+            if (!jg) continue;
+            if (!jmap.has(jg)) { joinMiss++; continue; }
+
+            let insAge = String(r[4] || '').trim();
+            let gender = String(r[2] || '').trim();
+            let code = String(r[11] || '').trim();
+            let name = String(r[12] || '').trim();
+            let amt = Number(r[15]) || 0;
+            let prm = Number(r[16]) || 0;
+            if (!code) continue;
+
+            let g = jmap.get(jg);
+            let c = classifyHealth(g.prod, g.w, g.x);
+            contracts.add(jg);
+
+            if (!riderUnits.has(code)) riderUnits.set(code, { name: name, amounts: new Set() });
+            if (amt) riderUnits.get(code).amounts.add(amt);
+            if (!riderFreq.has(code)) riderFreq.set(code, new Set());
+            riderFreq.get(code).add(jg);
+
+            if (!amt) continue;
+            let comboKey = [c.struct, c.exam, c.coverage, c.pay, insAge, gender].join('|');
+            if (!premiumTable.has(comboKey)) premiumTable.set(comboKey, new Map());
+            let cm = premiumTable.get(comboKey);
+            if (!cm.has(code)) cm.set(code, { name: name, rateSum: 0, rateN: 0, maxAmt: 0, n: 0 });
+            let e = cm.get(code);
+            e.rateSum += prm / amt; e.rateN++; e.n++;
+            if (amt > e.maxAmt) e.maxAmt = amt;
+            joinOk++;
+        }
+
+        // 특약별 단위(GCD) 산출 + 채택빈도
+        for (let [code, info] of riderUnits) {
+            let amts = Array.from(info.amounts);
+            info.unit = amts.length ? amts.reduce((a, b) => gcd2(a, b)) : 0;
+            info.unitLabel = humanUnit(info.unit);
+            info.freq = riderFreq.has(code) ? riderFreq.get(code).size : 0;
+            info.maxAmtGlobal = amts.length ? Math.max(...amts) : 0;
+            info.kinds = info.amounts.size;
+        }
+
+        premiumMeta = { joinOk, joinMiss, contracts: contracts.size, riders: riderUnits.size, combos: premiumTable.size };
+        return premiumMeta;
+    }
+
+    function handleRiderFile(e) {
+        if (!e.target.files.length) return;
+        if (!globalResultData || globalResultData.length <= 1) {
+            alert("먼저 건별엑셀로 분석을 실행해주세요. (증번 결합에 필요합니다)");
+            e.target.value = "";
+            return;
+        }
+        document.getElementById('loadingText').innerText = "수집결과를 결합·정제 중입니다...";
+        document.getElementById('loadingSpinner').style.display = 'flex';
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                let sheet = wb.Sheets['특약수집'] || wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                buildPremiumData(rows);
+                renderRiderAnalysis();
+            } catch (err) {
+                console.error(err);
+                alert("수집결과 파싱 오류: " + err.message);
+            } finally {
+                document.getElementById('loadingSpinner').style.display = 'none';
+            }
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+        e.target.value = "";
+    }
+
+    function renderRiderAnalysis() {
+        document.getElementById('riderEmpty').style.display = premiumMeta.riders ? 'none' : 'block';
+        document.getElementById('riderContent').style.display = premiumMeta.riders ? 'block' : 'none';
+        if (!premiumMeta.riders) return;
+
+        document.getElementById('r_riders').innerText = formatNum(premiumMeta.riders);
+        document.getElementById('r_contracts').innerText = formatNum(premiumMeta.contracts);
+        document.getElementById('r_combos').innerText = formatNum(premiumMeta.combos);
+        document.getElementById('r_miss').innerText = formatNum(premiumMeta.joinMiss);
+
+        let arr = Array.from(riderUnits.entries()).sort((a, b) => b[1].freq - a[1].freq);
+        let html = [];
+        arr.forEach(([code, info], idx) => {
+            let warn = info.kinds < 2
+                ? '<span class="badge bg-warning text-dark">단위 추정</span>'
+                : '<span class="badge bg-success">확정</span>';
+            html.push(`<tr>
+                <td><span class="badge ${idx < 3 ? 'bg-danger' : 'bg-secondary'}">${idx + 1}</span></td>
+                <td class="fw-bold">${code}</td>
+                <td class="text-start">${info.name}</td>
+                <td class="text-success fw-bold">${formatNum(info.freq)}</td>
+                <td class="fw-bold">${info.unitLabel}</td>
+                <td>${info.kinds}</td>
+                <td>${formatNum(info.maxAmtGlobal)}</td>
+                <td>${warn}</td>
+            </tr>`);
+        });
+        document.getElementById('riderTableBody').innerHTML = html.join('');
+    }
+
+    // 보험료표 JSON 내보내기 (가이드 페이지/Firebase 시드용)
+    function exportPremiumJSON() {
+        if (!premiumTable.size) return alert("먼저 수집결과.xlsx를 업로드하세요.");
+
+        let riders = {};
+        for (let [code, info] of riderUnits) {
+            riders[code] = { name: info.name, unit: info.unit, unitLabel: info.unitLabel, freq: info.freq, maxAmt: info.maxAmtGlobal, kinds: info.kinds };
+        }
+        let table = {};
+        for (let [comboKey, cm] of premiumTable) {
+            let obj = {};
+            for (let [code, e] of cm) {
+                obj[code] = {
+                    name: e.name,
+                    rate: e.rateSum / e.rateN,   // 비례단가 (보험료/가입금액)
+                    maxAmt: e.maxAmt,
+                    n: e.n
+                };
+            }
+            table[comboKey] = obj;
+        }
+        let out = {
+            meta: {
+                생성일: new Date().toISOString().slice(0, 10),
+                comboKeyFormat: "구조|심사|보장형태|납입|보험나이|성별",
+                결합계약수: premiumMeta.contracts,
+                조합수: premiumMeta.combos,
+                특약종류: premiumMeta.riders
+            },
+            riders: riders,
+            table: table
+        };
+        const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.download = `보험료표_${new Date().toISOString().slice(0,10)}.json`;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
     }
 
     function renderEfficiency() {
